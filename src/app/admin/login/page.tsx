@@ -5,7 +5,7 @@ import { getAdminSession } from "@/lib/auth/admin-session";
 import { AdminLoginForm } from "./login-form";
 
 export const metadata: Metadata = {
-  title: "Staff sign-in · Senhill Holiday Resort",
+  title: "Staff sign-in",
   // Admin pages should never appear in search results.
   robots: { index: false, follow: false },
 };

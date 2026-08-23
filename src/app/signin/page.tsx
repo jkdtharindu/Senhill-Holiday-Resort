@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
 
 export const metadata: Metadata = {
-  title: "Sign in · Senhill Holiday Resort",
+  title: "Sign in",
 };
 
 const ERROR_MESSAGES: Record<string, string> = {

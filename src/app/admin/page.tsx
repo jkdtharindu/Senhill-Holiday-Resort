@@ -9,7 +9,7 @@ import { formatDateForDisplay, todayAtResort } from "@/lib/dates";
 import { SignOutButton } from "./sign-out-button";
 
 export const metadata: Metadata = {
-  title: "Admin · Senhill Holiday Resort",
+  title: "Admin",
   robots: { index: false, follow: false },
 };
 
