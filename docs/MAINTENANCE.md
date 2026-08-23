@@ -180,9 +180,15 @@ From `ARCHITECTURE.md`, still not implemented:
 ## 10. Data and account housekeeping
 
 - **Placeholder rooms.** `Room 1/2/3 (placeholder)` and `Whole Villa (placeholder)` are seeded
-  with guessed capacities and no photos. Replace with real inventory through the admin panel
-  before launch. A deactivated `Test Room A (renamed)` also exists from Slice 4 verification —
-  hidden from guests, left rather than deleted since bookings could reference an item row.
+  with guessed capacities. Names, descriptions and capacities are still placeholders — replace
+  through the admin panel before launch. A deactivated `Test Room A (renamed)` also exists from
+  Slice 4 verification — hidden from guests, left rather than deleted since bookings could
+  reference an item row.
+- **Photos loaded 2026-08-23.** The 8 images from `docs/source-material/` are now attached: 5 on
+  the Villa (exterior, pool, common area) and 1 each on Room 1/2/3 (distinct bedroom shots — one
+  is a bunk/family room). These are real property photos, not filler, but were sorted into rooms
+  by visual inspection rather than confirmed by the owner — check the assignment holds before
+  launch, and replace/reorder through the panel as needed (Slice 4).
 - **Deleting a photo is irreversible.** The blob is removed along with the database row, by
   decision: at this volume the storage saving is irrelevant, but orphaned files nobody can
   identify become a real mess within a year. The admin UI must confirm before deleting, since
