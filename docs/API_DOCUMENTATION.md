@@ -2,9 +2,23 @@
 
 Base URL (local dev): `http://localhost:3000/api`
 
-Authenticated requests need `Authorization: Bearer <token>`. Two separate auth systems:
-customer tokens (from Google Sign-In) and admin tokens (from email/password) — a customer token
-can never call an admin-only route and vice versa.
+**Sessions are httpOnly cookies, not bearer tokens.** This section originally specified
+`Authorization: Bearer <token>` before any code existed; as built, both auth systems set an
+httpOnly, signed cookie on sign-in (`senhill_admin_session` for admins, Auth.js's own cookie for
+customers) and every subsequent request is authenticated by the browser sending that cookie
+automatically — there is no header to construct by hand. The cookie is deliberately unreadable
+by page JavaScript, which is what keeps a stored token from being exfiltrated by an XSS bug.
+Two entirely separate cookies, two entirely separate secrets: a customer session can never call
+an admin-only route and vice versa. See `ARCHITECTURE.md` and `MAINTENANCE.md` §1–2.
+
+**Response shape:** built as camelCase field names inside an object envelope (e.g.
+`{ "calendar": [...] }`, `{ "admin": {...} }`), not the snake_case bare-array style shown in a
+few of this document's original examples (written before implementation began). Kept consistent
+across every endpoint built so far rather than varying per route — a frontend written in
+TypeScript has no reason to convert field casing back and forth, and an object envelope leaves
+room to add metadata later (pagination, a window summary) without a breaking change. Where an
+example below still shows the original style, read it for the *shape of the data*, not the exact
+keys — the endpoints below marked "as built" show the real, current field names.
 
 ---
 
@@ -51,25 +65,34 @@ Partial update (name, description, capacity, custom_notes, active, images).
 
 ## Calendar
 
-### `GET /calendar?from=YYYY-MM-DD&to=YYYY-MM-DD`
-Public. Returns **CalendarState only** — no guest details, no room-level breakdown. Dates with
-no admin-set DayMode return `state: "unavailable"` and `day_mode: null` — not omitted from the
-array, so the frontend can render them distinctly (e.g. greyed out) rather than treating a gap
-in the response as an error.
+### `GET /calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` — as built, done
+Public, no session required — the response is identical for every caller. Returns
+**CalendarState only** — no guest details, no room-level breakdown. Dates with no admin-set
+DayMode return `state: "unavailable"` and `dayMode: null` — not omitted from the array, so the
+frontend can render them distinctly (e.g. greyed out) rather than treating a gap in the response
+as an error.
 
 **BookingWindow enforcement:** `from`/`to` are clamped server-side to `today`–`today+90 days`
-for this endpoint. A request for dates outside that window returns an empty array for those
-dates, not an error — the frontend shouldn't even offer navigation past the window (see
-`ARCHITECTURE.md` for the UI implication). Admin-only calendar endpoints are not clamped.
+(Asia/Colombo) for this endpoint. A request entirely outside that window returns `{ "calendar":
+[] }`; a request that only partially overlaps is silently trimmed to the window's edge, not
+rejected. Admin-only calendar endpoints (`GET /api/calendar/day-mode`) are not clamped.
 
 ```json
-[
-  { "date": "2026-09-09", "day_mode": null, "state": "unavailable" },
-  { "date": "2026-09-10", "day_mode": "room_mode", "state": "open" },
-  { "date": "2026-09-11", "day_mode": "room_mode", "state": "reserved" },
-  { "date": "2026-09-12", "day_mode": "villa_mode", "state": "booked" }
-]
+{
+  "calendar": [
+    { "date": "2026-09-09", "dayMode": null, "state": "unavailable" },
+    { "date": "2026-09-10", "dayMode": "room_mode", "state": "open" },
+    { "date": "2026-09-11", "dayMode": "room_mode", "state": "reserved" },
+    { "date": "2026-09-12", "dayMode": "villa_mode", "state": "booked" }
+  ]
+}
 ```
+
+CalendarState is computed at request time from `day_modes` + active `bookings`
+(`src/lib/calendar.ts`), never stored — see `ARCHITECTURE.md`, "Why CalendarState is derived, not
+stored". A booking against a Room or the Villa that has since been deactivated does not count
+toward "every room taken" or the villa's own status — the colour reflects what is bookable now,
+not a historical snapshot including inventory nobody can book any more.
 
 ### `GET /calendar/:date` — customer or admin, login required
 Day-detail view.

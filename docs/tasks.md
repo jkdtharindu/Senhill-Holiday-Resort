@@ -15,8 +15,10 @@
       Slice 4 done: rooms, villa and photo management work against live Neon and Vercel Blob.
       Slice 5 done: DayMode single-date and bulk-by-pattern assignment, with DayModeSwitchBlock
       verified against a real booking on the live database.
-      **Next: Slice 6, the public CalendarState aggregate (`GET /calendar`).** Nothing further is
-      needed from the owner for Slices 6–11.
+      Slice 6 done: the public `GET /api/calendar` aggregate, driven through open/reserved/booked
+      for both room-mode and villa-mode against real bookings on the live database.
+      **Next: Slice 7, the day-detail view (`GET /calendar/:date`).** Nothing further is needed
+      from the owner for Slices 7–11.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
@@ -105,9 +107,35 @@
       no cache to invalidate. Bulk-by-weekends over a full month set exactly the 8 correct dates and
       not one weekday. Unauthenticated requests 401; a plain (non-super) admin succeeds, matching
       FR11. All test data removed afterward — day_modes and bookings both back to empty.
-- [ ] Slice 6: Calendar aggregate endpoint (`GET /calendar`) — CalendarState derivation logic,
-      4 states incl. `unavailable`; BookingWindow (90-day rolling) enforced server-side for
-      customer-facing calls only, not admin
+- [x] Slice 6: Calendar aggregate endpoint — **done and verified against the live database.**
+      `GET /api/calendar?from=&to=` — public, no session required, response identical for every
+      caller.
+      Split into a pure derivation module (`src/lib/calendar.ts`, 18 unit tests) and the route as
+      a thin HTTP adapter, matching the pattern from Slice 5. The pure function decides one date's
+      colour from a pre-fetched snapshot of day_modes + active bookings — no per-date queries.
+      room_mode: `open` if no active room is taken, `booked` if every active room is taken (0
+      active rooms reads as `open`, not `booked`), `reserved` otherwise — counted by distinct
+      room id, not booking row count. villa_mode: mirrors the villa's own booking status
+      (`booked` beats `reserved` if both somehow overlap one date, so derivation never crashes on
+      an anomalous state even before Slice 8's booking-creation validation exists to prevent it).
+      A booking against a deactivated Room or the Villa is excluded from both branches — the
+      colour reflects what is bookable *now*.
+      Verified against the live database: an absurdly wide request (`2000-01-01`..`2050-01-01`)
+      revealed the true clamp (`2026-08-23`..`2026-11-21`, 91 entries) rather than trusting the
+      constant; a fully-out-of-window request returns `{ calendar: [] }`; a partially-overlapping
+      one is trimmed to the window edge, not rejected. Drove a real room through 0/3 → 1/3 → 2/3 →
+      3/3 booked and watched `open → reserved → reserved → booked`; drove a real villa booking
+      through `open → reserved → booked`; confirmed the checkout day reads `open` (half-open
+      range) on both room and villa dates. Deactivating the only room holding a booking flipped
+      that date from `reserved` to `open` in an isolated retest — the first version of this check
+      was run against leftover state from an earlier step and gave a misleading result, corrected
+      by re-running it cleanly rather than trusting the first pass. All test data removed
+      afterward.
+      Corrected `API_DOCUMENTATION.md`: the response is `{ "calendar": [...] }` with camelCase
+      `dayMode`, not the bare snake_case array in the original planning-stage example, matching
+      every other endpoint built so far — documented explicitly, along with the preamble's
+      `Authorization: Bearer` line, which was never accurate (both auth systems use httpOnly
+      cookies, not a header the caller constructs).
 - [ ] Slice 7: Day-detail endpoint (`GET /calendar/:date`) — customer view (RoomStatus, no
       guest identity) vs admin view (full detail)
 - [ ] Slice 8: Booking creation (`POST /bookings`) — validate BookingWindow, every date in the
