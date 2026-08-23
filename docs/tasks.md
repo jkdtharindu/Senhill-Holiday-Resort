@@ -38,8 +38,20 @@
       ignored and a plain admin is created; a plain admin gets 403 on both super-admin actions;
       a deactivated admin cannot sign in; self-deactivation and last-super-admin deactivation
       are both blocked; no password hash appears in any response.
-- [ ] Slice 3: Customer auth (NextAuth.js + Google provider, per GOOGLE_OAUTH_SETUP.md) —
-      find-or-create customer, never grants admin
+- [~] Slice 3: Customer auth — **built; awaiting one manual sign-in by the owner to confirm.**
+      Auth.js v5 (`next-auth@5.0.0-beta.32`) with the Google provider, JWT sessions and
+      **no database adapter** — the adapter would create `accounts`/`sessions`/
+      `verification_tokens`, three tables DATABASE_SCHEMA.md does not define and a second place
+      recording who a guest is. `src/lib/auth/customer.ts` owns the single `customers` row.
+      Customers are matched on Google's `sub`, never on email: emails move between accounts, so
+      matching on one would either lose a returning guest's history or hand it to a stranger.
+      Sign-in is refused unless Google reports the email as verified. Session carries the
+      `customers.id` and deliberately no role field.
+      Verified: Auth.js catch-all at `/api/auth/[...nextauth]` does not swallow the admin routes
+      (static segments win — `POST /api/auth/admin/login` still returns 200); Google accepts the
+      client id, redirect URI and scopes with no `redirect_uri_mismatch` and no Testing-mode
+      block. **Not yet verified — needs the owner:** completing a real sign-in, the `customers`
+      row being created, and a guest session getting 401 on admin routes.
 - [ ] Slice 4: BookableItems CRUD (admin: name, images, description, capacity — **no price
       field**) + public GET with images
 - [ ] Slice 5: DayMode — admin sets per-date mode (single + bulk-by-pattern, e.g. "weekends");

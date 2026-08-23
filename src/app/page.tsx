@@ -1,69 +1,93 @@
-import Image from "next/image";
+import { auth, signOut } from "@/auth";
+import { getCustomerById } from "@/lib/auth/customer";
+import { currentBookingWindow, formatDateForDisplay } from "@/lib/dates";
 
-export default function Home() {
+/**
+ * Placeholder home page.
+ *
+ * Enough to exercise guest sign-in end to end. The real landing page — photos,
+ * rooms, the colour-coded calendar — is Slice 12.
+ */
+export default async function HomePage() {
+  const session = await auth();
+  const customer = session?.user?.id
+    ? await getCustomerById(session.user.id)
+    : null;
+  const window = currentBookingWindow();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-dvh bg-stone-100 px-6 py-16 dark:bg-stone-950">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-8">
+        <header className="flex flex-col gap-2">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-teal-800 dark:text-teal-500">
+            Hedigalla · Sri Lanka
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
+            Senhill Holiday Resort
+          </h1>
+          <p className="text-base leading-relaxed text-stone-600 dark:text-stone-400">
+            A mountain retreat above the clouds — book a room, or take the whole
+            villa.
+          </p>
+        </header>
+
+        {customer ? (
+          <section className="flex flex-col gap-4 rounded-md border border-stone-300 bg-white px-4 py-4 dark:border-stone-800 dark:bg-stone-900">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                Signed in as {customer.name}
+              </h2>
+              <p className="text-sm text-stone-600 dark:text-stone-400">
+                {customer.email}
+              </p>
+              <p className="text-sm text-stone-600 dark:text-stone-400">
+                Phone on file:{" "}
+                {customer.phone ?? "none yet — we'll ask when you book"}
+              </p>
+            </div>
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/" });
+              }}
+            >
+              <button
+                type="submit"
+                className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-800 transition-colors hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800"
+              >
+                Sign out
+              </button>
+            </form>
+          </section>
+        ) : (
+          <section className="flex flex-col gap-3 rounded-md border border-stone-300 bg-white px-4 py-4 dark:border-stone-800 dark:bg-stone-900">
+            <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+              Not signed in
+            </h2>
+            <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">
+              Browsing is open to everyone. Sign in when you want to request a
+              stay.
+            </p>
+            <a
+              href="/signin"
+              className="self-start rounded-md bg-teal-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600"
+            >
+              Sign in with Google
+            </a>
+          </section>
+        )}
+
+        <section className="rounded-md border border-stone-300 bg-white px-4 py-4 dark:border-stone-800 dark:bg-stone-900">
+          <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+            Booking window
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
+            Dates can be booked from {formatDateForDisplay(window.from)} up to{" "}
+            {formatDateForDisplay(window.to)}. The window moves forward by a day
+            every day, in Sri Lanka time.
+          </p>
+        </section>
+      </div>
+    </main>
   );
 }
