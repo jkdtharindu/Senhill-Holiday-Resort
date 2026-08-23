@@ -48,6 +48,8 @@ committed, rotate it — deleting it in a later commit does not remove it from g
 - `docs/GOOGLE_OAUTH_SETUP.md` — step-by-step Google Sign-In setup via NextAuth.js (written for
   zero prior OAuth experience)
 - `docs/HITL.md` — actions that require explicit human approval before proceeding
+- `docs/MAINTENANCE.md` — decisions carrying a known trade-off, each with the condition under
+  which it should be revisited once the app is live. Read the "Revisit when" lines first
 - `docs/tasks.md` — build checklist in vertical slices, plus the full decision log
 
 ## Quick summary of the core mechanic

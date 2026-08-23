@@ -9,9 +9,12 @@
       rule, booking window, bulk day-mode assignment, hosting/DB requirement, auth approach
 
 ## In Progress →
-- [~] Slice 2 complete. Admin sign-in works against the live database and every access rule
-      is verified (see Slice 2 below). **Next: Slice 3, customer Google sign-in — blocked on
-      Google Cloud credentials from the owner.** Slice 4 onward needs nothing further.
+- [~] Slices 1–3 built. Admin sign-in fully verified against the live database; guest Google
+      sign-in built and its configuration confirmed with Google, but one real sign-in by the
+      owner is still outstanding (needs their password — cannot be done for them).
+      **Next: Slice 5, the DayMode and calendar engine.** Nothing further is needed from the
+      owner for Slices 4–11. Slice 4 (BookableItems + image upload) needs a Vercel Blob token.
+      Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 - [x] Slice 1: Next.js + Postgres scaffold — **done. Applied to the live Neon database.**
@@ -129,6 +132,18 @@
       already requires it.
 - [x] UI/screens were never scoped — all 11 slices describe data and endpoints, none describe a
       page. Added as Slice 12 below (~14 screens, roughly half the remaining work).
+
+## Deferred by decision — see docs/MAINTENANCE.md
+Owner decision 2026-08-23: proceed as built; review these once the app is live and running.
+Each entry there carries a "Revisit when" trigger rather than an open action.
+- [ ] Guest identity matched on Google `sub`, with email-reassignment takeover behaviour
+- [ ] No Auth.js database adapter (blocks multi-provider login and forced sign-out until added)
+- [ ] Rate limiting: no lockout by design; IP limit is soft off-Vercel; `admin_login_attempts`
+      grows unbounded because `pruneOldAttempts` is not scheduled
+- [ ] **No notifications anywhere** — largest operational risk; approval depends on someone
+      opening the panel
+- [ ] No self-service admin password reset; sole-super-admin lockout needs database access
+- [ ] CORS unrestricted; no refresh-token rotation; image upload validation due with Slice 4
 
 ## Open — needs the owner, not code
 - [ ] **Second admin account (name + email).** Two ApprovalVotes are required to reach `booked`,

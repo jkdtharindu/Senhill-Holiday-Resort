@@ -57,14 +57,28 @@ Deliberately starting with just `weekends` rather than a full recurrence-rule en
 RRULE) — add more patterns only if actually needed, per the project's general bias toward
 building the minimum that solves the stated problem.
 
+## Known trade-offs and deferred work
+Decisions taken with a known cost, each with the condition under which it should be revisited,
+are logged in `MAINTENANCE.md` — not repeated here. That file is the watch list for once the
+app is live; this one records why the architecture is shaped the way it is.
+
 ## Security posture (MVP-level, revisit before real launch)
 - Admin routes check role server-side (`admin` vs `super_admin`), never trust client-side UI
   hiding alone.
 - Public calendar/day-detail responses are shaped differently per audience (customer vs admin)
   at the API layer — the API itself withholds guest data from customer-scoped requests, rather
   than relying on the frontend to hide fields that were already sent.
-- Not yet implemented: rate limiting on admin login, refresh-token rotation, CORS restricted to
-  known origins, image upload validation (file type/size limits, malware scanning).
+- Admin login **is** rate limited (implemented in Slice 2): 8 failures per email and 20 per IP
+  in a 15-minute sliding window, counted in Postgres rather than process memory so it survives
+  across serverless instances. Deliberately not a lockout — see `MAINTENANCE.md` §4.
+- Admin passwords are bcrypt (cost 12). The "no such account" path runs a throwaway comparison so
+  it takes the same time as a real one, closing the timing channel that would otherwise reveal
+  which emails are real admin accounts.
+- Admin route guards re-read the database on every request rather than trusting token claims, so
+  deactivating an admin or changing a role takes effect immediately rather than at token expiry.
+- Still not implemented: refresh-token rotation, CORS restricted to known origins, image upload
+  validation (file type/size limits, malware scanning — due with Slice 4, do not ship the upload
+  UI without it).
 
 ## Scaling triggers
 - Single property, moderate booking volume — Postgres on a small managed instance is fine
