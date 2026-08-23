@@ -34,7 +34,10 @@
       immediately; database-backed rate limiting (8 failures per email, 20 per IP, 15-minute
       sliding window, no lockout); `/admin/login` and a placeholder `/admin` dashboard.
       Endpoints: `POST /api/auth/admin/login`, `POST /api/auth/admin/logout`,
-      `GET /api/auth/admin/me`, `GET|POST /api/admin/admins`, `PATCH /api/admin/admins/[id]`.
+      `GET /api/auth/admin/me`, `GET|POST /api/admin/admins`, `PATCH /api/admin/admins/[id]`
+      (active and/or name), `POST /api/admin/me/password` (own password only — a super admin
+      cannot set someone else's, so an issued starting password can be replaced with something
+      nobody else has seen).
       Verified end to end: wrong password and unknown email return byte-identical 401s (no user
       enumeration); throttling triggers on the 9th attempt with `Retry-After: 900`; throttling
       one email does not affect another; a `role: "super_admin"` field in a create request is
@@ -149,12 +152,17 @@ Each entry there carries a "Revisit when" trigger rather than an open action.
 - [ ] CORS unrestricted; no refresh-token rotation; image upload validation due with Slice 4
 
 ## Open — needs the owner, not code
-- [ ] **Second admin account (name + email).** Two ApprovalVotes are required to reach `booked`,
-      and only the seeded super_admin exists — until a second admin is added, *no booking can ever
-      be confirmed*. Blocks go-live, not the build.
+- [x] **Second admin account** — created 2026-08-23: `srivacation0@gmail.com`, role `admin`.
+      Two active admins now exist, so bookings can reach `booked`; the dashboard warning cleared.
+      **Name is the placeholder "Senhill Admin"** — it is stamped onto every ApprovalVote and
+      audit-log entry, so replace it with the real name via `PATCH /api/admin/admins/[id]`.
 - [ ] **Room inventory** — count, name and capacity per Room; Villa capacity (marketing copy in
-      `SENHILL/Hotel details.txt` implies 15). Placeholder data until supplied.
-- [ ] **Photo-to-room mapping** — 8 images exist in `SENHILL/`, none attributable to a specific room.
+      `docs/source-material/Hotel details.txt` implies 15). Placeholder data until supplied.
+- [x] **Photo-to-room mapping** — resolved as a non-question. Owner confirmed 2026-08-23 that
+      images are not fixed one-time content: admins upload and replace them through the panel as
+      the property changes. The 8 files in `docs/source-material/` are templates for initial
+      testing only. Slice 4 therefore needs upload / replace / reorder / delete, not a one-off
+      import — and the same applies to descriptions and notes.
 - [ ] **DefaultNotes / CustomNotes copy** and the exact **AdvancePaymentNotice** wording.
 - [ ] **No notifications anywhere** (PRD §4 rules out email/SMS). Consequence to accept
       consciously: a guest hears nothing after booking, and two admins must approve a request

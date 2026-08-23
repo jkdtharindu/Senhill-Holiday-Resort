@@ -16,7 +16,25 @@ import { db } from "@/db";
 import { adminUsers } from "@/db/schema";
 import { requireSuperAdmin } from "@/lib/auth/require-admin";
 
-const patchSchema = z.object({ active: z.boolean() });
+/**
+ * Both fields optional, but at least one required.
+ *
+ * `name` is editable because it is stamped onto every ApprovalVote and
+ * audit-log entry — a wrong name there quietly corrupts the record of who
+ * approved what, which is the whole reason those tables exist.
+ *
+ * There is deliberately no `password` field. A super admin cannot set another
+ * admin's password; only its owner can, through /api/admin/me/password. And no
+ * `role` field: promotion to super_admin is HITL-gated (docs/HITL.md).
+ */
+const patchSchema = z
+  .object({
+    active: z.boolean().optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+  })
+  .refine((v) => v.active !== undefined || v.name !== undefined, {
+    message: "Provide `active`, `name`, or both.",
+  });
 
 export async function PATCH(
   request: NextRequest,
@@ -40,11 +58,11 @@ export async function PATCH(
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
-      { error: "Provide `active` as true or false." },
+      { error: "Provide `active` as true or false, a non-empty `name`, or both." },
       { status: 400 },
     );
   }
-  const { active } = parsed.data;
+  const { active, name } = parsed.data;
 
   const [target] = await db
     .select({
@@ -64,7 +82,7 @@ export async function PATCH(
 
   // Locking yourself out is easy to do by accident and awkward to undo — it
   // needs another super admin, and there may not be one.
-  if (target.id === auth.admin.id && !active) {
+  if (target.id === auth.admin.id && active === false) {
     return Response.json(
       {
         error:
@@ -77,7 +95,10 @@ export async function PATCH(
   // Without at least one active super admin nobody can create admins, restore
   // accounts, or manage the team again — the system would need direct database
   // access to recover.
-  if (target.role === "super_admin" && !active) {
+  // `active === false` rather than `!active`: with `active` optional, `!active`
+  // is also true when the field is absent, which would fire this guard on a
+  // rename that changes no permissions at all.
+  if (target.role === "super_admin" && active === false) {
     const [{ n }] = await db
       .select({ n: count() })
       .from(adminUsers)
@@ -101,13 +122,19 @@ export async function PATCH(
     }
   }
 
-  if (target.active === active) {
+  // Build the patch from only the fields actually supplied, so a rename never
+  // silently rewrites `active` and vice versa.
+  const changes: { active?: boolean; name?: string } = {};
+  if (active !== undefined && active !== target.active) changes.active = active;
+  if (name !== undefined && name !== target.name) changes.name = name;
+
+  if (Object.keys(changes).length === 0) {
     return Response.json({ admin: target }); // already in the requested state
   }
 
   const [updated] = await db
     .update(adminUsers)
-    .set({ active })
+    .set(changes)
     .where(eq(adminUsers.id, id))
     .returning({
       id: adminUsers.id,

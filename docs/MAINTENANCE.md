@@ -110,24 +110,27 @@ alone would remove most of the pain.
 
 ---
 
-## 6. Two admins are required, and only one exists
+## 6. Two admins are required — satisfied
 
 **What it does.** Two *different* admins must approve before a booking becomes `booked`. A single
 decline kills it immediately.
 
-**The trade-off.** Until a second active admin account exists, **no booking can ever be
-confirmed.** The admin dashboard shows a warning while this is true.
+**Resolved 2026-08-23.** A second admin (`srivacation0@gmail.com`, role `admin`) was created
+by the owner, so bookings can now reach `booked`. The dashboard warning cleared automatically.
 
-**Revisit:** not a design question — a second admin simply needs creating before launch. Note
-that the approval rule itself is HITL-gated (`HITL.md`); reducing it to one approval, or adding
-a bypass, is not a routine change.
+**Still worth knowing.** If either account is deactivated the system silently returns to the
+state where nothing can be confirmed — the warning reappears, but only to whoever opens the
+dashboard. The approval rule itself is HITL-gated (`HITL.md`); reducing it to one approval, or
+adding a bypass, is not a routine change.
 
 ---
 
 ## 7. Admin sessions last 8 hours, with no self-service password reset
 
-**What it does.** A signed-in admin stays signed in for 8 hours. There is no "forgot password"
-flow — a super admin resets it.
+**What it does.** A signed-in admin stays signed in for 8 hours. Admins change their own
+password at `POST /api/admin/me/password`, which requires the current one. There is no "forgot
+password" flow — a super admin cannot set someone else's password either, by design, so a
+forgotten password means creating a replacement account.
 
 **Why no reset flow.** A password reset by email means anyone who reaches an admin's inbox can
 take over an admin account. With a two-person team, asking the other person is safer and takes
@@ -137,7 +140,13 @@ seconds.
 database access — re-running the seed script with a new `SEED_SUPER_ADMIN_PASSWORD` will not
 help, because the seed skips accounts that already exist.
 
-**Revisit when:** the admin team grows past about five people, or a lockout actually happens.
+**Also.** Sessions are stateless JWTs, so changing a password does **not** sign other devices
+out — an existing session stays valid until it expires (up to 8 hours). Someone changing their
+password because they think it was compromised is not fully protected until then.
+
+**Revisit when:** the admin team grows past about five people, a lockout actually happens, or a
+password change needs to take effect on other devices immediately. The last one needs either a
+session store or a `password_changed_at` column checked during token verification.
 
 ---
 
