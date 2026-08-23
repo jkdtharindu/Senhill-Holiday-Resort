@@ -1,0 +1,70 @@
+# Architecture
+
+## Stack decisions
+
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend + Backend | Next.js 14 (App Router, TypeScript) | Approval workflow, per-day mode switching, date-range conflict validation, and image management justify a fuller framework than a no-build-step prototype this time. |
+| Database | PostgreSQL, **fully persistent, always-on** — not a demo/in-memory store | This is a hard requirement, not a suggestion: the app has no meaning without bookings, approvals, and day-mode config surviving restarts and being shared across every admin session. See "Persistence requirement" below. |
+| Image storage | **Vercel Blob** (confirmed) | Room/Villa photos need real file storage, not just URL fields. Chosen over Supabase Storage/S3 because hosting is already Vercel — no extra account, no extra credentials to manage, and built-in image optimisation. Revisit only if hosting ever moves off Vercel. |
+| Customer auth | **NextAuth.js (Auth.js) with the Google provider** | The simplest realistic path for someone without prior OAuth experience — NextAuth handles the token exchange, session cookies, and refresh for you; you mostly just paste in a Client ID/Secret from Google Cloud Console. Far less manual token-verification code than wiring Google Identity Services by hand. See `GOOGLE_OAUTH_SETUP.md`. |
+| Admin auth | Separate, custom email/password + bcrypt + own JWT — **not** routed through NextAuth | Kept deliberately apart from the customer auth system (see HITL.md) — a compromised or misconfigured NextAuth/Google setup must never be able to reach admin routes. Two independent systems, not two providers on one system. |
+| Hosting | **Vercel** (confirmed) + a managed Postgres add-on — **Neon** recommended (native Vercel integration, generous free tier, simplest setup for a first-time database), Supabase or Railway are fine alternatives | Standard, low-friction pairing for Next.js; free/low tiers sufficient at single-property scale. |
+
+## Persistence requirement (explicit, not assumed)
+Confirmed by the project owner: the database must be a real, always-running managed Postgres
+instance from day one — bookings, approvals, day-mode configuration, and room/villa content all
+need to survive restarts and be visible across every admin's session immediately. This rules out
+any local-file or in-memory fallback mode for this project (unlike the earlier SQLite-based
+project, which was fine using a local file). Local development still uses a real Postgres
+instance (Docker Postgres, or a free-tier Neon/Supabase dev branch) — never an in-memory mock.
+
+## Why the DayMode mechanic lives at the data layer, not just UI
+`day_modes` is a real table, not a computed/UI-only concept, because:
+- Booking creation must be **rejected server-side** if it doesn't match the day's mode (a Room
+  booking attempted on a `villa_mode` day must fail at the API, not just be hidden in the UI).
+- Admins need to set modes **ahead of time** (e.g. mark all December weekends as villa_mode in
+  one batch), which requires persistence, not a runtime calculation.
+
+## Why CalendarState is derived, not stored
+`CalendarState` (`open`/`reserved`/`booked` shown on the month view) is deliberately **not** a
+column anywhere — it's computed from `bookings.status` + `day_modes.mode` at query time. Storing
+it directly would create a sync problem (two sources of truth that can drift). The aggregation
+rule itself is documented once, in `PRD.md` §9 and `DATABASE_SCHEMA.md`, and should be
+implemented as a single shared query/function reused by both `/calendar` and `/calendar/:date`
+— not reimplemented per endpoint.
+
+## Why two separate approval endpoints don't exist (single `/vote` route)
+Approve and decline are modeled as one endpoint with a `vote` field, not two separate routes,
+because the business rule ("2 approvals to confirm, 1 decline to kill it") lives in one place —
+the handler for `POST /bookings/:id/vote` — rather than being duplicated logic split across two
+route handlers that could drift out of sync.
+
+## BookingWindow enforcement — server-side, not just UI
+The 90-day rolling BookingWindow is enforced in the API layer (`GET /calendar`, `POST
+/bookings`), not just by hiding calendar navigation in the frontend. A determined customer
+hitting the API directly with an out-of-window date must still be rejected. The frontend's job
+is to make it a non-issue in practice (don't render a "next month" arrow past the window), not
+to be the only enforcement.
+
+## BulkDayModeAssignment — pattern matching kept server-side and simple
+`pattern: "weekends"` is resolved server-side by iterating the given date range and matching
+day-of-week — no client-side date math, so the rule can't drift between frontend and backend.
+Deliberately starting with just `weekends` rather than a full recurrence-rule engine (like iCal
+RRULE) — add more patterns only if actually needed, per the project's general bias toward
+building the minimum that solves the stated problem.
+
+## Security posture (MVP-level, revisit before real launch)
+- Admin routes check role server-side (`admin` vs `super_admin`), never trust client-side UI
+  hiding alone.
+- Public calendar/day-detail responses are shaped differently per audience (customer vs admin)
+  at the API layer — the API itself withholds guest data from customer-scoped requests, rather
+  than relying on the frontend to hide fields that were already sent.
+- Not yet implemented: rate limiting on admin login, refresh-token rotation, CORS restricted to
+  known origins, image upload validation (file type/size limits, malware scanning).
+
+## Scaling triggers
+- Single property, moderate booking volume — Postgres on a small managed instance is fine
+  indefinitely at this scale; no premature scaling work needed.
+- If this becomes a multi-property product later (explicitly out of scope per PRD §4), every
+  table needs a tenant key — treat that as its own project, not a bolt-on.

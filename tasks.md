@@ -1,0 +1,168 @@
+# Tasks
+
+## Completed ✓
+- [x] Grill Me session — full architecture, data model, and edge cases confirmed (see PRD.md)
+- [x] Docs generated: PRD, UBIQUITOUS_LANGUAGE, DATABASE_SCHEMA, API_DOCUMENTATION,
+      ARCHITECTURE, HITL, README, tasks, GOOGLE_OAUTH_SETUP
+- [x] Post-generation audit pass — multi-night date-range conflicts, capacity, pricing scope cut
+- [x] Pre-build feedback round — property identity, seeded super admin, DayMode switch-block
+      rule, booking window, bulk day-mode assignment, hosting/DB requirement, auth approach
+
+## In Progress →
+- [ ] → Nothing built yet. Docs reviewed and reconciled at build kickoff (2026-08-23) — see
+      "Discovered & resolved (build-kickoff review)" below. Awaiting owner setup (Neon, GitHub,
+      Vercel, Google Cloud accounts) before Slice 1 can start.
+
+## Next To Do ○ (suggested build order — vertical slices)
+- [ ] Slice 1: Next.js + Postgres scaffold (Vercel + Neon), DB migrations for all tables in
+      DATABASE_SCHEMA.md
+- [ ] Slice 2: Admin auth (email/password, seed first super_admin from **`SEED_SUPER_ADMIN_EMAIL`**)
+      + super_admin create-admin flow
+- [ ] Slice 3: Customer auth (NextAuth.js + Google provider, per GOOGLE_OAUTH_SETUP.md) —
+      find-or-create customer, never grants admin
+- [ ] Slice 4: BookableItems CRUD (admin: name, images, description, capacity — **no price
+      field**) + public GET with images
+- [ ] Slice 5: DayMode — admin sets per-date mode (single + bulk-by-pattern, e.g. "weekends");
+      public/customer calendar respects it; DayModeSwitchBlock enforced (reject switch if
+      conflicting bookings exist under current mode)
+- [ ] Slice 6: Calendar aggregate endpoint (`GET /calendar`) — CalendarState derivation logic,
+      4 states incl. `unavailable`; BookingWindow (90-day rolling) enforced server-side for
+      customer-facing calls only, not admin
+- [ ] Slice 7: Day-detail endpoint (`GET /calendar/:date`) — customer view (RoomStatus, no
+      guest identity) vs admin view (full detail)
+- [ ] Slice 8: Booking creation (`POST /bookings`) — validate BookingWindow, every date in the
+      range (DayMode match, not `unavailable`, no conflict) and reject with the specific
+      conflicting date(s) named; validate `guests_count` against capacity; include
+      `advance_payment_notice` fixed text in the success response
+- [ ] Slice 9: ApprovalVote (`POST /bookings/:id/vote`) — 2-approve/1-decline logic +
+      booking_audit_log entries
+- [ ] Slice 10: Admin comprehensive booking update (phone, payment stage, advance payment,
+      internal notes) — same pattern as the earlier hotel project. **No currency symbol/field
+      needed** — plain numeric amount, manual process.
+- [ ] Slice 11: DefaultNotes + CustomNotes — admin edit, shown in booking flow (summary of
+      terms/conditions per room, ~3 phrases per the owner's description — placeholder text
+      until admin fills in real content via panel)
+- [ ] Slice 12: **Frontend screens (~14)** — guest: home, rooms/villa listing + detail, colour-coded
+      calendar, day-detail, booking form, my-bookings; admin: login, bookings list, booking detail
+      (vote/payment/history), calendar + DayMode controls, items manager w/ upload, notes editor,
+      admin accounts. Mobile-first — most guests will book from a phone. **Not in the original
+      slice list; roughly half the remaining work.**
+
+## Discovered & resolved (grill session)
+- [x] Default DayMode for unset dates — no default, `unavailable` state.
+- [x] Customer self-cancellation — not supported, admin-only.
+
+## Discovered & resolved (post-generation audit pass)
+- [x] Multi-night bookings crossing a DayMode boundary — whole range must be consistent;
+      rejection names the specific conflicting date(s).
+- [x] Room/Villa capacity — added, enforced server-side.
+- [x] Pricing scope — dropped entirely; fixed AdvancePaymentNotice shown instead.
+
+## Discovered & resolved (pre-build feedback round)
+- [x] DayMode-switch-after-booking-exists — **blocked**, admin must resolve existing bookings
+      first (`DayModeSwitchBlock`).
+- [x] Currency — confirmed moot; all payment handling is manual, no currency field/symbol needed.
+- [x] Bulk DayMode assignment — added `PUT /calendar/day-mode/bulk`, pattern-based (starting
+      with `weekends`).
+- [x] Booking window — 90-day rolling limit from today, customer-facing only.
+- [x] Property identity — **Senhill Holiday Resort, Hedigalle**. Logo deferred, not needed yet.
+- [x] Super admin seed email — supplied by the owner, kept in `.env.local` as
+      `SEED_SUPER_ADMIN_EMAIL`. Never committed; the repo is public.
+- [x] Google auth approach — NextAuth.js + Google provider (simpler than raw token
+      verification), admin auth stays fully separate.
+- [x] Hosting — Vercel confirmed. DB must be real, persistent, always-on Postgres (Neon
+      recommended) — not a demo/in-memory store, from day one.
+- [x] Room/Villa content — real data to be entered by the admin manually via the panel once
+      built; use clearly-labeled placeholder data for initial scaffold/testing only.
+
+## Discovered & resolved (build-kickoff review — 2026-08-23)
+- [x] Property name conflict (folder said "Satori Hills", docs said "Senhill") — **Senhill Holiday
+      Resort, Hedigalle** is the public-facing name everywhere: headline, browser tab, Google OAuth
+      app name. Folder name is a working title only, ignore it.
+- [x] Money fields vs. the no-pricing rule — **advance only**. `total_amount` and `balance_due`
+      dropped from `bookings` (they were pricing by another name, contradicting PRD §4).
+      `advance_amount`, `advance_paid_date` and `payment_stage` stay as admin-only record-keeping
+      per FR10. No number is ever shown to a customer.
+- [x] Image storage — **Vercel Blob** (was "Supabase Storage or S3"). Hosting is already Vercel,
+      so this avoids a second account and a second set of credentials. See ARCHITECTURE.md.
+- [x] Timezone — all date boundaries resolve in **`Asia/Colombo` (UTC+5:30)**, never UTC or
+      server-local. Vercel runs UTC; untreated, "today" rolls at 05:30 local and shifts both the
+      BookingWindow and every CalendarState colour by a day for part of each night. Rule written
+      into DATABASE_SCHEMA.md.
+- [x] `check_in`/`check_out` semantics were never defined — now **half-open** (hotel standard):
+      a 10th→13th stay occupies the 10th, 11th, 12th; the 13th is free for the next arrival.
+      Written into DATABASE_SCHEMA.md. Affects conflict detection, RoomStatus and CalendarState.
+- [x] Customer phone collection (open question in GOOGLE_OAUTH_SETUP.md §4) — collected on the
+      **booking form**, not at first login. Google doesn't reliably supply one and `POST /bookings`
+      already requires it.
+- [x] UI/screens were never scoped — all 11 slices describe data and endpoints, none describe a
+      page. Added as Slice 12 below (~14 screens, roughly half the remaining work).
+
+## Open — needs the owner, not code
+- [ ] **Second admin account (name + email).** Two ApprovalVotes are required to reach `booked`,
+      and only the seeded super_admin exists — until a second admin is added, *no booking can ever
+      be confirmed*. Blocks go-live, not the build.
+- [ ] **Room inventory** — count, name and capacity per Room; Villa capacity (marketing copy in
+      `SENHILL/Hotel details.txt` implies 15). Placeholder data until supplied.
+- [ ] **Photo-to-room mapping** — 8 images exist in `SENHILL/`, none attributable to a specific room.
+- [ ] **DefaultNotes / CustomNotes copy** and the exact **AdvancePaymentNotice** wording.
+- [ ] **No notifications anywhere** (PRD §4 rules out email/SMS). Consequence to accept
+      consciously: a guest hears nothing after booking, and two admins must approve a request
+      neither was told about. Requires someone opening the admin panel daily. Flag if unacceptable —
+      it would be a scope addition, not a bug fix.
+
+## Assumption flagged for confirmation (not yet explicitly asked)
+- [ ] Admin calendar/DayMode configuration is **not** restricted by the 90-day BookingWindow
+      (admins can plan further ahead than customers can book) — reasonable default, stated in
+      PRD.md §9a, but not explicitly asked. Flag if this is wrong.
+
+## Blocked (can't start yet)
+- [ ] Actual deployment — HITL-gated per HITL.md (hosting choice itself is now decided: Vercel)
+
+## Future (post-MVP, per PRD §11)
+- [ ] In-app pricing (Quotation/BaseRate), if manual coordination doesn't scale
+- [ ] Online payment collection
+- [ ] Automated reminder messaging
+- [ ] Guest reviews
+- [ ] Revisit DayMode exclusivity if business needs change
+- [ ] Real logo/branding once available
+
+---
+
+## Recent decisions (running log — newest on top)
+- **Build-kickoff review (2026-08-23)** — Read all 9 docs end to end before writing code. Owner
+  confirmed three decisions: public name is **Senhill Holiday Resort, Hedigalle** (folder name
+  "Satori Hills" is a working title, ignore it); **advance-only money fields** — dropped
+  `total_amount` and `balance_due` from `bookings` as they contradicted PRD §4, kept
+  `advance_amount`/`advance_paid_date`/`payment_stage` as admin-only per FR10; image storage
+  is **Vercel Blob**, replacing the earlier "Supabase Storage or S3" (hosting is already Vercel —
+  one fewer account and credential set). Three gaps closed by stated assumption rather than
+  question, since each had one defensible answer: `Asia/Colombo` for every date boundary (Vercel
+  runs UTC, 5.5h behind — would shift the BookingWindow and calendar colours nightly); half-open
+  `check_in`/`check_out` (checkout day is not an occupied night); phone collected on the booking
+  form rather than at first login. Added **Slice 12** — the ~14 frontend screens, which no
+  existing slice covered despite being roughly half the work. Estimate: 10–13 working sessions
+  across 8 phases. Still blocked on the owner for: second admin account, room inventory,
+  photo-to-room mapping, notes copy — and a conscious decision about having no notifications.
+
+- **Pre-build feedback round (this chat)** — Owner supplied: property name (Senhill Holiday
+  Resort, Hedigalle), super admin email (kept out of the repo, see `.env.example`), hosting (Vercel + must-be-real
+  persistent Postgres), room data will be entered manually later (placeholder for now), notes
+  content will be added manually via admin panel later. Resolved remaining conflicts: no price
+  field anywhere (confirmed), DayMode switch blocked if conflicting bookings exist. New features
+  added: bulk DayMode assignment by pattern (e.g. weekends), 90-day rolling BookingWindow.
+  Recommended NextAuth.js for customer Google auth (simpler than manual token verification) —
+  admin auth stays fully separate per HITL.md.
+- **Audit pass (this chat)** — Reviewed all 8 docs for gaps before build. Resolved: multi-night
+  date-range conflict validation (rejects with named conflicting dates), added Capacity field
+  per BookableItem, **dropped pricing entirely from scope** (no Quotation/BaseRate/`/pricing`
+  endpoints — customer sees a fixed AdvancePaymentNotice instead, amount handled manually).
+- **Follow-up (this chat)** — Resolved the 2 open questions: DayMode has no default
+  (`unavailable` 4th CalendarState added), and customer self-cancellation is not supported
+  (admin-only). Updated PRD, DATABASE_SCHEMA, UBIQUITOUS_LANGUAGE, API_DOCUMENTATION accordingly.
+- **Grill Me session (this chat)** — Confirmed: single property, Room + Villa as separate
+  BookableItems, DayMode toggle (room_mode/villa_mode, mutually exclusive — resolves earlier
+  double-booking concern from a prior draft), 2-admin ApprovalVote system, manual payment only,
+  Google auth for customers / separate email+password for admins, Next.js + Postgres stack,
+  3-tier calendar detail (public/logged-in coarse CalendarState → logged-in day-detail
+  RoomStatus → admin full detail with guest identity).

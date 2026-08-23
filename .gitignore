@@ -1,0 +1,48 @@
+# ---- Secrets: never commit these ----
+# Holds the Neon connection string, Google client secret, NextAuth secret,
+# and the Vercel Blob token. If one of these is ever committed by accident,
+# treat the credential as compromised and rotate it — removing the file in a
+# later commit does NOT remove it from git history.
+.env
+.env.*
+!.env.example
+
+# ---- Dependencies ----
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/versions
+
+# ---- Next.js build output ----
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+*.tsbuildinfo
+
+# ---- Vercel ----
+.vercel
+
+# ---- Testing / coverage ----
+coverage/
+.nyc_output/
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp

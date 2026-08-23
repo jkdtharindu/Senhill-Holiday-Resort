@@ -63,7 +63,9 @@ status). Only admins see guest identity and full booking details.
 
 ## Project specifics
 - **Property:** Senhill Holiday Resort, Hedigalle. Logo/branding deferred — not needed yet.
-- **First Super Admin:** `jkdtharindu@gmail.com` (seeded at Slice 2).
+- **First Super Admin:** supplied via `SEED_SUPER_ADMIN_EMAIL` in `.env.local` (seeded at
+  Slice 2). Deliberately not committed — this repo is public, and naming the highest-privilege
+  account in it is free reconnaissance for anyone reading. See `.env.example`.
 - **Hosting:** Vercel, confirmed. Database: Neon recommended (native Vercel integration).
 - **Room/Villa content:** real data (rooms, capacity, images, notes) will be entered manually by
   the admin via the panel once built — the initial build uses clearly-labeled placeholder data.
