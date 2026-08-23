@@ -19,6 +19,11 @@ import { config } from "dotenv";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 
+// Loaded before the dynamic imports below, deliberately. `./index.ts` reads
+// DATABASE_URL at module scope to build its connection pool, so a static import
+// would be hoisted and evaluated before these lines ran — and the pool would be
+// constructed against an undefined URL. Hence: config first, import second.
+// This file is `.mts` rather than `.ts` so top-level await is available.
 config({ path: ".env.local" });
 config({ path: ".env" });
 
