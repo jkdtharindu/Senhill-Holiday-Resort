@@ -224,7 +224,32 @@ specific value.
 
 ---
 
-## 12. Verified by the owner
+## 12. The destructive-SQL HITL hook is a regex safety net, not a formal guarantee
+
+**What it does.** A `PreToolUse` hook in `.claude/settings.json` scans every Bash command Claude
+runs for `DELETE FROM` / `DROP TABLE` / `DROP DATABASE` / `TRUNCATE TABLE`, case-insensitive, and
+forces an approval prompt when found — including text buried inside an inline `node -e` script.
+See `HITL.md`, "Enforcement".
+
+**Why a regex, not something stronger.** The rejected alternative was a real SQL-aware parser (or
+a stricter sandbox denying direct database access outright). Both are more work than this
+single-admin, single-repo project needs — the hook exists to catch Claude drifting back into the
+pattern that caused this entry to be written (bundling a delete into a larger verification
+script), not to defend against someone deliberately trying to evade it.
+
+**The trade-off.** A sufficiently obfuscated command — building the string from concatenated
+fragments, base64, a second script file the hook never inspects — would not match the regex and
+would not trigger the prompt. This is not a security boundary; it is a habit-correction net for
+an assistant operating in good faith.
+
+**Revisit when:** this hook is ever relied on as a security control rather than a workflow
+safeguard — for instance, if this repo ever has multiple contributors with direct write access
+whose commands are not otherwise reviewed, or if it moves toward answering to anyone beyond the
+owner and the two admins.
+
+---
+
+## 13. Verified by the owner
 
 - [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
       name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session

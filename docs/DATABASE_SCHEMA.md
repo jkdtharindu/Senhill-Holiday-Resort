@@ -24,6 +24,24 @@ PostgreSQL. Table/column names use the exact terms from `UBIQUITOUS_LANGUAGE.md`
 | created_by | uuid | FK → admin_users, nullable (first super_admin is seeded) |
 | created_at | timestamptz | |
 
+## `admin_login_attempts`
+Added at Slice 2, alongside admin auth — not in the original schema draft. Backs the rate
+limiter (`src/lib/auth/rate-limit.ts`): every sign-in attempt, successful or not, is recorded
+here, keyed by email and by IP. Deliberately **not** a lockout table — see `MAINTENANCE.md` §4
+for why a hard lockout on a 2–3 person admin team is a worse risk than a sliding window.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| email | text | recorded even for a non-existent account, so probing counts too |
+| ip_address | text | nullable; best-effort, from `x-forwarded-for` |
+| succeeded | boolean | |
+| attempted_at | timestamptz | |
+
+No FK to `admin_users` — a failed attempt against an email with no matching account must still be
+recorded to be counted against. Rows are never deleted programmatically; `pruneOldAttempts()`
+exists in `rate-limit.ts` but nothing schedules it yet (`MAINTENANCE.md` §4).
+
 ## `bookable_items`
 | Column | Type | Notes |
 |---|---|---|
@@ -167,11 +185,18 @@ bookings 1---* booking_audit_log
 **RoomStatus** (per room, on a `room_mode` day): `booked` if that room has a `bookings` row with
 `status IN ('reserved','booked')` overlapping the date, else `open`.
 
-**CalendarState** (per date, aggregate — see `PRD.md` §9 for full rule table, now 4 values):
+**CalendarState** (per date, aggregate — see `PRD.md` §9 for full rule table, now 4 values).
+Implemented in `src/lib/calendar.ts`, unit-tested and verified against the live database:
 - No `day_modes` row for that date: `unavailable`.
-- `room_mode` day: `open` if no rooms booked; `reserved` if some but not all rooms have an
-  active booking; `booked` if every room has one.
-- `villa_mode` day: mirrors the single villa booking's own `status`.
+- `room_mode` day: `open` if no *currently active* room is taken; `reserved` if some but not all
+  are; `booked` if every active room is taken. Zero active rooms reads as `open`, not `booked` —
+  nothing is taken out of nothing that could be taken.
+- `villa_mode` day: mirrors the villa's own booking `status` — `booked` beats `reserved` if both
+  somehow overlap the same date, so the derivation never crashes on that state even though
+  Slice 8's booking-creation validation should prevent it occurring.
+- A `bookings` row against a Room or the Villa that has since been **deactivated** does not count
+  toward either branch — CalendarState reflects what is bookable *now*, not a historical snapshot
+  including inventory nobody can book any more.
 
 ## Key constraint reminders
 - `day_modes` + `bookable_items.kind` together enforce the "never both room and villa active

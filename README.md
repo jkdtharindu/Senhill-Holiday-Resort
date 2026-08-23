@@ -1,15 +1,16 @@
 # Senhill Holiday Resort — Hedigalle
 ## Hotel & Villa Booking System with Admin Approval
 
-Planning-stage documentation for Senhill Holiday Resort's booking platform: individual rooms or
-the whole villa, admin-controlled per-day mode (room basis vs. villa-only basis), two-admin
-approval before a booking is confirmed, and manual payment tracking.
+Senhill Holiday Resort's booking platform: individual rooms or the whole villa, admin-controlled
+per-day mode (room basis vs. villa-only basis), two-admin approval before a booking is confirmed,
+and manual payment tracking.
 
-**Status: Slice 1 scaffolded (2026-08-23).** Next 16 project, database schema and migration for
-all 9 tables, the Asia/Colombo date module with 35 passing tests, and an idempotent seed script.
-Nothing has touched a live database yet — that needs a Neon connection string. See
-`docs/tasks.md` for build order, decision history, and what is still waiting on the owner
-(second admin account, room inventory, photo mapping, notes copy).
+**Status: Slices 1–6 built and verified against the live database (2026-08-23).** Scaffold,
+schema, both auth systems (admin email/password and guest Google sign-in), room/villa/photo
+management, DayMode assignment with the DayModeSwitchBlock, and the public calendar — including a
+visual `/calendar` page, not just the API. Second admin account created; still waiting on the
+owner for real room inventory (names/capacities) and the DefaultNotes/AdvancePaymentNotice
+wording. See `docs/tasks.md` for the full build order and decision history.
 
 ## Getting started
 
@@ -97,9 +98,10 @@ status). Only admins see guest identity and full booking details.
 - **First Super Admin:** supplied via `SEED_SUPER_ADMIN_EMAIL` in `.env.local` (seeded at
   Slice 2). Deliberately not committed — this repo is public, and naming the highest-privilege
   account in it is free reconnaissance for anyone reading. See `.env.example`.
-- **Hosting:** Vercel, confirmed. Database: Neon recommended (native Vercel integration).
-- **Room/Villa content:** real data (rooms, capacity, images, notes) will be entered manually by
-  the admin via the panel once built — the initial build uses clearly-labeled placeholder data.
+- **Hosting:** Vercel, confirmed. Database: Neon, live (Singapore region).
+- **Room/Villa content:** the upload/edit panel is built (Slice 4) and real property photos are
+  loaded. Room names and capacities are still the seeded placeholders — real values are still
+  needed from the owner.
 
 ## Stack
 Next.js 16 (App Router, TypeScript) + PostgreSQL (Neon) + Drizzle ORM + Vercel Blob for images +

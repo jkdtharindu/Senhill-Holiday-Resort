@@ -57,6 +57,22 @@ Deliberately starting with just `weekends` rather than a full recurrence-rule en
 RRULE) — add more patterns only if actually needed, per the project's general bias toward
 building the minimum that solves the stated problem.
 
+## Business logic pattern: pure module, service module, thin route
+Established at Slice 5 and repeated at Slice 6 — the convention later slices (bookings,
+approvals) should follow rather than reinvent per feature:
+
+- **A pure module** (`src/lib/day-mode.ts`, `src/lib/calendar.ts`) holds the actual business
+  rule as plain functions over data the caller already fetched — no database import. This is
+  what makes rules like DayModeSwitchBlock and CalendarState derivation directly unit-testable,
+  the same reasoning `src/lib/dates.ts` established at Slice 1.
+- **A service module** (`src/lib/day-mode-service.ts`, `src/lib/calendar-service.ts`) does the
+  actual fetch-from-Postgres-then-call-the-pure-function cycle, so two different routes needing
+  the same query don't each write their own version and drift apart.
+- **The route file stays a thin adapter** — parse the request, call the service, return JSON.
+  Early in Slice 5 the service logic briefly lived inside one route file with a second route
+  importing from it; moved out once it was clear that let one endpoint's shape quietly affect
+  another's behavior, which a route file (meant to be request-in/response-out) shouldn't do.
+
 ## Known trade-offs and deferred work
 Decisions taken with a known cost, each with the condition under which it should be revisited,
 are logged in `MAINTENANCE.md` — not repeated here. That file is the watch list for once the

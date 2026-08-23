@@ -100,7 +100,7 @@
       all-or-nothing.
       Added a read companion, `GET /api/calendar/day-mode?from=&to=`, returning raw day_modes rows
       so an admin (or this verification pass) can inspect what is configured. This is **not** the
-      public CalendarState aggregate — that colour derivation is still Slice 6, not built.
+      public CalendarState aggregate — that colour derivation is Slice 6, below.
       Verified against the live database, with a real booking inserted to force the case that
       matters most: a reserved booking blocked all three nights it covered, the checkout day (half
       open) switched freely, and declining the booking immediately freed the switch — no restart,
@@ -136,6 +136,16 @@
       every other endpoint built so far — documented explicitly, along with the preamble's
       `Authorization: Bearer` line, which was never accurate (both auth systems use httpOnly
       cookies, not a header the caller constructs).
+      **Follow-up the same day:** added a server-rendered `/calendar` page — the first visual
+      (non-JSON) view of Slice 6's output, a month grid over the 90-day window. Extracted the
+      fetch-derive cycle out of the route into `src/lib/calendar-service.ts` so the route and the
+      page share one implementation. Caught and fixed a real bug before it shipped: the page built
+      as a **static** page (prerendered once at build time) because nothing in it reads cookies or
+      headers, the only signals Next's static analysis treats as a dynamic trigger — left alone it
+      would have shown a BookingWindow frozen at the last deploy and never reflected a DayMode set
+      the next day. Fixed with `export const dynamic = "force-dynamic"`; confirmed by rebuilding
+      and checking the route listing flip from prerendered to dynamic, not just by reading the page
+      in dev.
 - [ ] Slice 7: Day-detail endpoint (`GET /calendar/:date`) — customer view (RoomStatus, no
       guest identity) vs admin view (full detail)
 - [ ] Slice 8: Booking creation (`POST /bookings`) — validate BookingWindow, every date in the

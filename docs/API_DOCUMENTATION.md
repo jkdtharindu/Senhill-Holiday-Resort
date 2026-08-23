@@ -101,8 +101,11 @@ Day-detail view.
 - Admin response: same, plus full guest details, payment stage, and approval status per booking.
   Not restricted by BookingWindow.
 
-### `PUT /calendar/day-mode` — admin
-Set DayMode for one or more explicit dates ahead of time.
+### `PUT /calendar/day-mode` — admin — as built, done
+Set DayMode for one or more explicit dates ahead of time. Any admin, not just super admin, per
+FR11. Refuses more than 500 dates in one request (`MAX_EXPLICIT_DATES` in
+`src/lib/day-mode.ts`) — not a business rule, a typo-catching safety cap; see `MAINTENANCE.md`
+§11.
 ```json
 { "dates": ["2026-12-25", "2026-12-26"], "mode": "villa_mode" }
 ```
@@ -115,10 +118,20 @@ which were blocked, since a bulk request may partially succeed:
   "blocked": [{ "date": "2026-12-25", "reason": "Existing booking under current mode" }]
 }
 ```
+Verified against the live database with a real booking inserted: blocked every night it covered,
+let the checkout day switch freely (half-open range), and freed the switch immediately once the
+booking was declined.
 
-### `PUT /calendar/day-mode/bulk` — admin
+### `GET /calendar/day-mode?from=&to=` — admin — as built, done, not in the original plan
+Raw `day_modes` rows in a date range — `[{ date, mode, setBy, updatedAt }]`. Not the public
+CalendarState aggregate (that's `GET /calendar`, above); this exists so an admin picking dates to
+set can see what's already configured. Not clamped to the BookingWindow — admins plan further
+ahead than customers can book, per PRD §9a.
+
+### `PUT /calendar/day-mode/bulk` — admin — as built, done
 BulkDayModeAssignment by pattern, not just an explicit date list — e.g. "every Saturday and
-Sunday in this range."
+Sunday in this range." Refuses a `from`–`to` span wider than 2 years (`MAX_BULK_RANGE_DAYS`),
+same reasoning as the 500-date cap above.
 ```json
 {
   "from": "2026-09-01", "to": "2026-11-30",
@@ -128,7 +141,8 @@ Sunday in this range."
 ```
 `pattern` values: `weekends` (Sat+Sun) to start; extendable later to specific weekdays or a
 custom recurrence if needed. Same partial-success/blocked response shape as the single-date
-endpoint above.
+endpoint above. Verified against the live database: a full month set exactly the correct weekend
+dates, not one weekday slipped through.
 
 ---
 
