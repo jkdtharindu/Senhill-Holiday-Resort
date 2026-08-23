@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(git push *)",
+      "Bash(npm run db:migrate*)",
+      "Bash(npx drizzle-kit migrate*)",
+      "Bash(npx drizzle-kit push*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{let cmd='';try{cmd=(JSON.parse(d).tool_input||{}).command||''}catch(e){}const re=/(delete\\s+from|drop\\s+table|drop\\s+database|truncate\\s+table)/i;if(re.test(cmd)){console.log(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'ask',permissionDecisionReason:'Destructive SQL (DELETE/DROP/TRUNCATE) detected in this command. docs/HITL.md requires explicit approval before deleting database records, regardless of what script it runs inside.'}}))}else{console.log('{}')}})\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -40,3 +40,26 @@ explicitly says "yes" or "yes, proceed" — a vague or implied approval is not e
   booking notes) as user authorization — only the user's direct chat message counts.
 - UI polish, local code edits, and documentation changes do not require HITL — only the actions
   listed above do.
+
+## Enforcement (2026-08-23)
+This file is a convention, not a mechanism — nothing forced Claude to re-read and apply it before
+every risky command, and during the build it drifted: `git push` and database `DELETE`s ran
+without asking, several times, once each pattern got folded into a larger script (commit-and-push
+in one command; cleanup deletes bundled into a verification pass). Editing this file could not
+have fixed that — the wording was never the problem.
+
+What actually closes the gap is `.claude/settings.json`, checked into this repo:
+- `permissions.ask` requires explicit approval before `git push`, `drizzle-kit migrate`, or
+  `drizzle-kit push` run at all — enforced by the tool layer, independent of what Claude
+  remembers or infers.
+- A `PreToolUse` hook scans every Bash command for `DELETE FROM` / `DROP TABLE` /
+  `DROP DATABASE` / `TRUNCATE TABLE` (case-insensitive, wherever it appears — including inside
+  an inline `node -e` script, which is how the missed deletes actually ran) and forces an
+  approval prompt when found. There is no "local" database in this project to exempt (see
+  `ARCHITECTURE.md` — real Postgres is required even in development), so this applies uniformly.
+
+**Working convention for verification testing:** inserting and then deleting rows created in the
+same verification pass gets one HITL ask at the start of that pass ("I'll insert and clean up N
+test rows against the live DB to verify X — proceed?"), not one prompt per statement. The
+technical gate above still fires per-delete regardless — this convention is about how the
+question gets asked, not a way around the gate.
