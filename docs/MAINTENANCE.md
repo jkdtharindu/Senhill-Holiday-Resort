@@ -164,8 +164,13 @@ inside each hash, so existing passwords keep verifying and only get upgraded whe
 From `ARCHITECTURE.md`, still not implemented:
 
 - **CORS is not restricted** to known origins.
-- **Image upload validation** — file type and size limits — lands with Slice 4. Do not ship the
-  upload UI without it.
+- ~~Image upload validation~~ — **done in Slice 4.** Files are identified by their leading bytes
+  rather than the declared Content-Type, capped at 8 MB and 12 per item, JPEG/PNG/WebP only.
+  Worth knowing: there is no malware scanning and no image re-encoding, so a file that is a
+  genuine JPEG but crafted to exploit an image decoder would still be stored and served. At this
+  scale, with uploads restricted to two trusted admins, that is an accepted risk. **Revisit if**
+  uploading is ever opened to guests — then re-encode every upload server-side, which strips
+  anything hidden in the original.
 - **No refresh-token rotation.** Sessions simply expire.
 
 **Revisit:** before public launch, and specifically before the first real guest booking.
@@ -175,7 +180,13 @@ From `ARCHITECTURE.md`, still not implemented:
 ## 10. Data and account housekeeping
 
 - **Placeholder rooms.** `Room 1/2/3 (placeholder)` and `Whole Villa (placeholder)` are seeded
-  with guessed capacities. Replace with real inventory through the admin panel before launch.
+  with guessed capacities and no photos. Replace with real inventory through the admin panel
+  before launch. A deactivated `Test Room A (renamed)` also exists from Slice 4 verification —
+  hidden from guests, left rather than deleted since bookings could reference an item row.
+- **Deleting a photo is irreversible.** The blob is removed along with the database row, by
+  decision: at this volume the storage saving is irrelevant, but orphaned files nobody can
+  identify become a real mess within a year. The admin UI must confirm before deleting, since
+  there is no undo and no recycle bin.
 - **`esc@example.invalid`** is a deactivated test admin account created while verifying Slice 2.
   Left in place at the owner's instruction rather than deleted. It cannot sign in. Delete it
   whenever convenient.

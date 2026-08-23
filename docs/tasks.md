@@ -12,8 +12,9 @@
 - [~] Slices 1–3 complete and verified end to end against the live database, including a real
       Google sign-in by the owner. Both auth systems confirmed independent: a guest session
       cannot reach any admin route.
-      **Next: Slice 5, the DayMode and calendar engine.** Nothing further is needed from the
-      owner for Slices 4–11. Slice 4 (BookableItems + image upload) needs a Vercel Blob token.
+      Slice 4 done: rooms, villa and photo management work against live Neon and Vercel Blob.
+      **Next: Slice 5, the DayMode and calendar engine.** Nothing further is needed from the owner
+      for Slices 5–11.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
@@ -61,8 +62,25 @@
       `sub`. A guest session gets 401 on every admin API route and 307 to /admin/login on the
       admin page — including when the guest cookie is renamed to the admin cookie name, since
       the signature still fails.
-- [ ] Slice 4: BookableItems CRUD (admin: name, images, description, capacity — **no price
-      field**) + public GET with images
+- [x] Slice 4: BookableItems CRUD + images — **done and verified against live Neon and Vercel Blob.**
+      Endpoints: `GET|POST /api/bookable-items`, `GET|PATCH /api/bookable-items/[id]`,
+      `POST|PATCH /api/bookable-items/[id]/images` (upload / reorder),
+      `DELETE /api/bookable-items/[id]/images/[imageId]`.
+      **Upload validation judges the file by its leading bytes, never the declared Content-Type** —
+      the browser supplies that and a script can set it to anything. JPEG/PNG/WebP only, 8 MB cap,
+      12 photos per item. Deleting a photo removes the blob too and closes the gap in
+      `display_order` so positions stay contiguous.
+      No DELETE for items: bookings reference the row, so removal would orphan or cascade away a
+      guest's history. `active: false` instead — hidden from guests, still visible to admins, and
+      a direct guest fetch 404s. `kind` is not editable (it would change what existing bookings
+      mean) and only one villa may exist (villa_mode offers *the* villa, not a choice).
+      Reducing capacity below an existing booking's guest count returns 409 naming the affected
+      bookings, overridable with `force: true` — those guests are already coming, so it warns
+      rather than blocks.
+      Verified: an .exe renamed .jpg *and* declaring image/jpeg is rejected; so are an SVG carrying
+      script and a 9 MB file; a genuine JPEG uploads, is publicly reachable, and is gone from
+      storage after delete; unauthenticated upload 401s; a partial reorder list is refused; zero
+      blobs leaked across the whole test run.
 - [ ] Slice 5: DayMode — admin sets per-date mode (single + bulk-by-pattern, e.g. "weekends");
       public/customer calendar respects it; DayModeSwitchBlock enforced (reject switch if
       conflicting bookings exist under current mode)
