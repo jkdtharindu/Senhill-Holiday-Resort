@@ -184,6 +184,12 @@ export default async function HomePage() {
             {formatDateForDisplay(window.to)}. The window moves forward by a day
             every day, in Sri Lanka time.
           </p>
+          <a
+            href="/calendar"
+            className="mt-3 inline-block text-sm font-medium text-teal-800 underline-offset-2 hover:underline dark:text-teal-500"
+          >
+            View the calendar &rarr;
+          </a>
         </section>
       </div>
     </main>
