@@ -9,9 +9,9 @@
       rule, booking window, bulk day-mode assignment, hosting/DB requirement, auth approach
 
 ## In Progress →
-- [~] Slices 1–3 built. Admin sign-in fully verified against the live database; guest Google
-      sign-in built and its configuration confirmed with Google, but one real sign-in by the
-      owner is still outstanding (needs their password — cannot be done for them).
+- [~] Slices 1–3 complete and verified end to end against the live database, including a real
+      Google sign-in by the owner. Both auth systems confirmed independent: a guest session
+      cannot reach any admin route.
       **Next: Slice 5, the DayMode and calendar engine.** Nothing further is needed from the
       owner for Slices 4–11. Slice 4 (BookableItems + image upload) needs a Vercel Blob token.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
@@ -41,7 +41,7 @@
       ignored and a plain admin is created; a plain admin gets 403 on both super-admin actions;
       a deactivated admin cannot sign in; self-deactivation and last-super-admin deactivation
       are both blocked; no password hash appears in any response.
-- [~] Slice 3: Customer auth — **built; awaiting one manual sign-in by the owner to confirm.**
+- [x] Slice 3: Customer auth — **done and verified with a real Google sign-in.**
       Auth.js v5 (`next-auth@5.0.0-beta.32`) with the Google provider, JWT sessions and
       **no database adapter** — the adapter would create `accounts`/`sessions`/
       `verification_tokens`, three tables DATABASE_SCHEMA.md does not define and a second place
@@ -53,8 +53,11 @@
       Verified: Auth.js catch-all at `/api/auth/[...nextauth]` does not swallow the admin routes
       (static segments win — `POST /api/auth/admin/login` still returns 200); Google accepts the
       client id, redirect URI and scopes with no `redirect_uri_mismatch` and no Testing-mode
-      block. **Not yet verified — needs the owner:** completing a real sign-in, the `customers`
-      row being created, and a guest session getting 401 on admin routes.
+      block. Owner completed a real sign-in on 2026-08-23: the `customers` row was created with
+      name and email from Google, `phone` left null as designed, and identity stored as Google
+      `sub`. A guest session gets 401 on every admin API route and 307 to /admin/login on the
+      admin page — including when the guest cookie is renamed to the admin cookie name, since
+      the signature still fails.
 - [ ] Slice 4: BookableItems CRUD (admin: name, images, description, capacity — **no price
       field**) + public GET with images
 - [ ] Slice 5: DayMode — admin sets per-date mode (single + bulk-by-pattern, e.g. "weekends");

@@ -180,8 +180,8 @@ From `ARCHITECTURE.md`, still not implemented:
 
 ---
 
-## 11. Verified by the owner, still outstanding
+## 11. Verified by the owner
 
-- [ ] Complete a real Google sign-in as a guest, confirm the `customers` row is created, and
-      confirm a guest session gets 401 on admin routes. Cannot be done without the account
-      owner's password.
+- [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
+      name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session
+      returns 401 on every admin API route and is redirected away from the admin page.
