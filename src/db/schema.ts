@@ -87,6 +87,42 @@ export const adminUsers = pgTable("admin_users", {
     .defaultNow(),
 });
 
+/* -------------------------------------------------- admin_login_attempts */
+
+/**
+ * Every admin sign-in attempt, successful or not.
+ *
+ * Serves two purposes: rate limiting, and an audit trail of who signed in and
+ * from where. Rate limiting has to live in the database rather than in process
+ * memory because Vercel runs many short-lived instances — an in-memory counter
+ * would reset constantly and let an attacker through simply by being spread
+ * across instances.
+ *
+ * Deliberately NOT a lockout. Counting attempts in a sliding window slows an
+ * attacker down without letting them disable a real admin's account by
+ * deliberately failing logins against their email. With only two or three
+ * admins on this system, a lockout would be a denial-of-service handed to
+ * anyone who knows an admin's email address.
+ */
+export const adminLoginAttempts = pgTable(
+  "admin_login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Stored even when no such admin exists, so probing for valid emails is
+    // still counted and rate limited.
+    email: text("email").notNull(),
+    ipAddress: text("ip_address"),
+    succeeded: boolean("succeeded").notNull(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("admin_login_attempts_email_idx").on(t.email, t.attemptedAt),
+    index("admin_login_attempts_ip_idx").on(t.ipAddress, t.attemptedAt),
+  ],
+);
+
 /* --------------------------------------------------------- bookable_items */
 
 export const bookableItems = pgTable(
@@ -281,6 +317,7 @@ export const bookingAuditLog = pgTable(
 
 export type Customer = typeof customers.$inferSelect;
 export type AdminUser = typeof adminUsers.$inferSelect;
+export type AdminLoginAttempt = typeof adminLoginAttempts.$inferSelect;
 export type BookableItem = typeof bookableItems.$inferSelect;
 export type BookableItemImage = typeof bookableItemImages.$inferSelect;
 export type DayMode = typeof dayModes.$inferSelect;

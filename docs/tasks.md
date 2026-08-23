@@ -9,22 +9,35 @@
       rule, booking window, bulk day-mode assignment, hosting/DB requirement, auth approach
 
 ## In Progress →
-- [~] → Slice 1 scaffolded and verified locally (see below). Everything that does not need a
-      live database is done and building green. **Blocked on DATABASE_URL** (Neon) to apply
-      migrations and seed; blocked on a Vercel account for the first deploy. Google Cloud
-      credentials are not needed until Slice 3.
+- [~] Slice 2 complete. Admin sign-in works against the live database and every access rule
+      is verified (see Slice 2 below). **Next: Slice 3, customer Google sign-in — blocked on
+      Google Cloud credentials from the owner.** Slice 4 onward needs nothing further.
 
 ## Next To Do ○ (suggested build order — vertical slices)
-- [~] Slice 1: Next.js + Postgres scaffold — **code done, not yet applied to a database.**
+- [x] Slice 1: Next.js + Postgres scaffold — **done. Applied to the live Neon database.**
       Built: Next 16 + TypeScript + Tailwind 4 scaffold; Drizzle schema for all 9 tables
       (`src/db/schema.ts`); generated migration (`drizzle/0000_initial_schema.sql`); connection
       pooling (`src/db/index.ts`); Asia/Colombo date module with 35 passing tests
       (`src/lib/dates.ts`); idempotent seed script (`src/db/seed.ts`); `.env.example`.
-      Verified: `npm test` 35/35, `tsc --noEmit` clean, `next build` succeeds.
-      Remaining: `npm run db:migrate` + `npm run db:seed` once DATABASE_URL exists, then
-      first deploy to Vercel.
-- [ ] Slice 2: Admin auth (email/password, seed first super_admin from **`SEED_SUPER_ADMIN_EMAIL`**)
-      + super_admin create-admin flow
+      Verified against the live database: 9 tables created (10 after Slice 2 added
+      `admin_login_attempts`); seed applied and confirmed idempotent on re-run; check
+      constraints reject `check_out <= check_in`, zero-night stays, zero guests, and any
+      booking status outside the enum. Remaining: first deploy to Vercel.
+- [x] Slice 2: Admin auth — **done and verified against the live database.**
+      Built: bcrypt password hashing (cost 12, 12-char minimum); JWT sessions in an httpOnly
+      SameSite=lax cookie, 8-hour expiry, signed with `ADMIN_JWT_SECRET` and refused if that
+      secret ever equals `NEXTAUTH_SECRET`; `requireAdmin`/`requireSuperAdmin` guards that
+      re-read the database rather than trusting token claims, so deactivation takes effect
+      immediately; database-backed rate limiting (8 failures per email, 20 per IP, 15-minute
+      sliding window, no lockout); `/admin/login` and a placeholder `/admin` dashboard.
+      Endpoints: `POST /api/auth/admin/login`, `POST /api/auth/admin/logout`,
+      `GET /api/auth/admin/me`, `GET|POST /api/admin/admins`, `PATCH /api/admin/admins/[id]`.
+      Verified end to end: wrong password and unknown email return byte-identical 401s (no user
+      enumeration); throttling triggers on the 9th attempt with `Retry-After: 900`; throttling
+      one email does not affect another; a `role: "super_admin"` field in a create request is
+      ignored and a plain admin is created; a plain admin gets 403 on both super-admin actions;
+      a deactivated admin cannot sign in; self-deactivation and last-super-admin deactivation
+      are both blocked; no password hash appears in any response.
 - [ ] Slice 3: Customer auth (NextAuth.js + Google provider, per GOOGLE_OAUTH_SETUP.md) —
       find-or-create customer, never grants admin
 - [ ] Slice 4: BookableItems CRUD (admin: name, images, description, capacity — **no price
