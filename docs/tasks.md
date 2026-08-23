@@ -9,13 +9,20 @@
       rule, booking window, bulk day-mode assignment, hosting/DB requirement, auth approach
 
 ## In Progress →
-- [ ] → Nothing built yet. Docs reviewed and reconciled at build kickoff (2026-08-23) — see
-      "Discovered & resolved (build-kickoff review)" below. Awaiting owner setup (Neon, GitHub,
-      Vercel, Google Cloud accounts) before Slice 1 can start.
+- [~] → Slice 1 scaffolded and verified locally (see below). Everything that does not need a
+      live database is done and building green. **Blocked on DATABASE_URL** (Neon) to apply
+      migrations and seed; blocked on a Vercel account for the first deploy. Google Cloud
+      credentials are not needed until Slice 3.
 
 ## Next To Do ○ (suggested build order — vertical slices)
-- [ ] Slice 1: Next.js + Postgres scaffold (Vercel + Neon), DB migrations for all tables in
-      DATABASE_SCHEMA.md
+- [~] Slice 1: Next.js + Postgres scaffold — **code done, not yet applied to a database.**
+      Built: Next 16 + TypeScript + Tailwind 4 scaffold; Drizzle schema for all 9 tables
+      (`src/db/schema.ts`); generated migration (`drizzle/0000_initial_schema.sql`); connection
+      pooling (`src/db/index.ts`); Asia/Colombo date module with 35 passing tests
+      (`src/lib/dates.ts`); idempotent seed script (`src/db/seed.ts`); `.env.example`.
+      Verified: `npm test` 35/35, `tsc --noEmit` clean, `next build` succeeds.
+      Remaining: `npm run db:migrate` + `npm run db:seed` once DATABASE_URL exists, then
+      first deploy to Vercel.
 - [ ] Slice 2: Admin auth (email/password, seed first super_admin from **`SEED_SUPER_ADMIN_EMAIL`**)
       + super_admin create-admin flow
 - [ ] Slice 3: Customer auth (NextAuth.js + Google provider, per GOOGLE_OAUTH_SETUP.md) —

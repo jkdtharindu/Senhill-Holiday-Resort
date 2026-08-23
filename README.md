@@ -5,21 +5,50 @@ Planning-stage documentation for Senhill Holiday Resort's booking platform: indi
 the whole villa, admin-controlled per-day mode (room basis vs. villa-only basis), two-admin
 approval before a booking is confirmed, and manual payment tracking.
 
-**Status: docs finalized and reconciled at build kickoff (2026-08-23) — no code written yet.**
-See `tasks.md` for the build order, the full decision history, and the short list of items still
-waiting on the owner (second admin account, room inventory, photo mapping, notes copy).
+**Status: Slice 1 scaffolded (2026-08-23).** Next 16 project, database schema and migration for
+all 9 tables, the Asia/Colombo date module with 35 passing tests, and an idempotent seed script.
+Nothing has touched a live database yet — that needs a Neon connection string. See
+`docs/tasks.md` for build order, decision history, and what is still waiting on the owner
+(second admin account, room inventory, photo mapping, notes copy).
+
+## Getting started
+
+You need a Neon Postgres database first — there is deliberately no offline or in-memory mode,
+because bookings and approvals are meaningless if they do not survive a restart.
+
+```bash
+cp .env.example .env.local   # then paste your Neon connection string into it
+npm install
+npm run db:migrate           # creates all 9 tables
+npm run db:seed              # first super_admin + placeholder rooms
+npm run dev                  # http://localhost:3000
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server with hot reload |
+| `npm test` | Runs the test suite (no database needed) |
+| `npm run typecheck` | TypeScript check with no build |
+| `npm run build` | Production build — same one Vercel runs |
+| `npm run db:generate` | Writes a new migration after editing `src/db/schema.ts` |
+| `npm run db:migrate` | Applies pending migrations |
+| `npm run db:studio` | Opens a browser UI to inspect the database |
+| `npm run db:seed` | Seeds the super admin, placeholder rooms, and site settings |
+
+`.env.local` holds every secret and is git-ignored. Never commit it. If a credential does get
+committed, rotate it — deleting it in a later commit does not remove it from git history.
 
 ## Documentation index
-- `PRD.md` — problem, personas, functional requirements, the DayMode/CalendarState mechanic
+- `docs/PRD.md` — problem, personas, functional requirements, the DayMode/CalendarState mechanic
   (read this one first — it's the core of the whole system), BookingWindow rule, success metrics
-- `UBIQUITOUS_LANGUAGE.md` — glossary; match these terms exactly in code (don't invent synonyms)
-- `DATABASE_SCHEMA.md` — tables, columns, relationships, derived-value rules
-- `API_DOCUMENTATION.md` — every planned endpoint, request/response shapes
-- `ARCHITECTURE.md` — stack decisions and why, security posture, persistence requirement
-- `GOOGLE_OAUTH_SETUP.md` — step-by-step Google Sign-In setup via NextAuth.js (written for
+- `docs/UBIQUITOUS_LANGUAGE.md` — glossary; match these terms exactly in code (don't invent synonyms)
+- `docs/DATABASE_SCHEMA.md` — tables, columns, relationships, derived-value rules
+- `docs/API_DOCUMENTATION.md` — every planned endpoint, request/response shapes
+- `docs/ARCHITECTURE.md` — stack decisions and why, security posture, persistence requirement
+- `docs/GOOGLE_OAUTH_SETUP.md` — step-by-step Google Sign-In setup via NextAuth.js (written for
   zero prior OAuth experience)
-- `HITL.md` — actions that require explicit human approval before proceeding
-- `tasks.md` — build checklist in vertical slices, plus the full decision log
+- `docs/HITL.md` — actions that require explicit human approval before proceeding
+- `docs/tasks.md` — build checklist in vertical slices, plus the full decision log
 
 ## Quick summary of the core mechanic
 Every calendar date is set by an admin to one of two modes — individually, or in bulk by
@@ -28,7 +57,7 @@ pattern (e.g. "all weekends in this range"):
 - **villa_mode** — only the whole villa is bookable that day
 
 Mutually exclusive by design, which is what keeps room and villa bookings from ever conflicting
-over the same dates — see `PRD.md` §9. A date's mode is **blocked from switching** if a
+over the same dates — see `docs/PRD.md` §9. A date's mode is **blocked from switching** if a
 conflicting booking already exists under the current mode — the admin must resolve it first.
 
 Customers can only view/book within a **rolling 90-day window** from today; admins aren't
@@ -71,6 +100,5 @@ status). Only admins see guest identity and full booking details.
   the admin via the panel once built — the initial build uses clearly-labeled placeholder data.
 
 ## Stack
-Next.js 14 (App Router, TypeScript) + PostgreSQL (Neon) + Vercel Blob for images +
-NextAuth.js for customer Google auth. See `ARCHITECTURE.md` for full rationale.
-"# Senhill-Holiday-Resort" 
+Next.js 16 (App Router, TypeScript) + PostgreSQL (Neon) + Drizzle ORM + Vercel Blob for images +
+NextAuth.js for customer Google auth. See `docs/ARCHITECTURE.md` for full rationale.
