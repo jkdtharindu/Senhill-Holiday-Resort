@@ -206,7 +206,25 @@ From `ARCHITECTURE.md`, still not implemented:
 
 ---
 
-## 11. Verified by the owner
+## 11. DayMode request-size caps are a safety net, not a business rule
+
+**What it does.** `PUT /api/calendar/day-mode` refuses more than 500 explicit dates in one
+request; `PUT /api/calendar/day-mode/bulk` refuses a `from`–`to` span wider than 2 years. Both
+return 400 naming the limit.
+
+**Why.** Nothing in `PRD.md` or `API_DOCUMENTATION.md` sets a limit — these exist only so a typo
+in `to` (a wrong year, say) fails loudly with a clear message rather than silently queueing up
+years of date writes. Not a real usage ceiling: legitimate admin actions (a whole year of
+weekends, a few hundred explicit dates) sit far under both caps.
+
+**Revisit when:** a genuine admin action needs to exceed one of these — for instance, setting
+DayMode more than two years ahead in a single bulk call. Raise the constant in
+`src/lib/day-mode.ts` (`MAX_BULK_RANGE_DAYS`, `MAX_EXPLICIT_DATES`); nothing else depends on the
+specific value.
+
+---
+
+## 12. Verified by the owner
 
 - [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
       name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session

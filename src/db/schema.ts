@@ -321,6 +321,8 @@ export type AdminLoginAttempt = typeof adminLoginAttempts.$inferSelect;
 export type BookableItem = typeof bookableItems.$inferSelect;
 export type BookableItemImage = typeof bookableItemImages.$inferSelect;
 export type DayMode = typeof dayModes.$inferSelect;
+/** `room_mode` | `villa_mode` — the two values the `day_mode_kind` enum allows. */
+export type DayModeKind = (typeof dayModeKind.enumValues)[number];
 export type Booking = typeof bookings.$inferSelect;
 export type ApprovalVote = typeof approvalVotes.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;

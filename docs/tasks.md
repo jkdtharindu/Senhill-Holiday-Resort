@@ -13,8 +13,10 @@
       Google sign-in by the owner. Both auth systems confirmed independent: a guest session
       cannot reach any admin route.
       Slice 4 done: rooms, villa and photo management work against live Neon and Vercel Blob.
-      **Next: Slice 5, the DayMode and calendar engine.** Nothing further is needed from the owner
-      for Slices 5–11.
+      Slice 5 done: DayMode single-date and bulk-by-pattern assignment, with DayModeSwitchBlock
+      verified against a real booking on the live database.
+      **Next: Slice 6, the public CalendarState aggregate (`GET /calendar`).** Nothing further is
+      needed from the owner for Slices 6–11.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
@@ -81,9 +83,28 @@
       script and a 9 MB file; a genuine JPEG uploads, is publicly reachable, and is gone from
       storage after delete; unauthenticated upload 401s; a partial reorder list is refused; zero
       blobs leaked across the whole test run.
-- [ ] Slice 5: DayMode — admin sets per-date mode (single + bulk-by-pattern, e.g. "weekends");
-      public/customer calendar respects it; DayModeSwitchBlock enforced (reject switch if
-      conflicting bookings exist under current mode)
+- [x] Slice 5: DayMode — **done and verified against the live database.**
+      Endpoints: `PUT|GET /api/calendar/day-mode` (explicit dates), `PUT /api/calendar/day-mode/bulk`
+      (pattern — only `weekends` for now, extendable). Any admin may set DayMode, per FR11 (not
+      super-admin-only).
+      Split deliberately into a pure module (`src/lib/day-mode.ts` — pattern resolution, the
+      switch-block decision, no database) and a DB-orchestration module
+      (`src/lib/day-mode-service.ts`) shared by both routes, so the single-date and bulk endpoints
+      can never disagree about what counts as a blocked switch. The pure module has 23 unit tests
+      covering the half-open boundary and the rule that a switch is blocked by a booking under the
+      date's *current* mode only — never the target mode, never the other item kind.
+      A request may partially succeed: each date is judged independently and the response lists
+      `updated` and `blocked` (with a reason) separately, per API_DOCUMENTATION.md — not
+      all-or-nothing.
+      Added a read companion, `GET /api/calendar/day-mode?from=&to=`, returning raw day_modes rows
+      so an admin (or this verification pass) can inspect what is configured. This is **not** the
+      public CalendarState aggregate — that colour derivation is still Slice 6, not built.
+      Verified against the live database, with a real booking inserted to force the case that
+      matters most: a reserved booking blocked all three nights it covered, the checkout day (half
+      open) switched freely, and declining the booking immediately freed the switch — no restart,
+      no cache to invalidate. Bulk-by-weekends over a full month set exactly the 8 correct dates and
+      not one weekday. Unauthenticated requests 401; a plain (non-super) admin succeeds, matching
+      FR11. All test data removed afterward — day_modes and bookings both back to empty.
 - [ ] Slice 6: Calendar aggregate endpoint (`GET /calendar`) — CalendarState derivation logic,
       4 states incl. `unavailable`; BookingWindow (90-day rolling) enforced server-side for
       customer-facing calls only, not admin
