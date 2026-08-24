@@ -73,6 +73,36 @@ approvals) should follow rather than reinvent per feature:
   importing from it; moved out once it was clear that let one endpoint's shape quietly affect
   another's behavior, which a route file (meant to be request-in/response-out) shouldn't do.
 
+## Frontend organization (Route groups & layouts)
+
+Built with Next.js 16 App Router route groups (`(guest)` and `admin/(panel)`) and shared layouts:
+
+- **(guest)** wraps all customer-facing routes (`/`, `/rooms`, `/calendar`, `/book`, `/my-bookings`, `/signin`). These add no URL segment, keeping every existing URL unchanged. The layout loads the guest session and renders `SiteHeader` (logo, main nav, sign-in/sign-out).
+- **admin/(panel)** wraps all admin panel routes (`/admin`, `/admin/bookings`, `/admin/calendar`, etc.). Also adds no URL segment. The layout calls `requireAdmin()` and redirects unauthenticated requests to `/admin/login`. Renders `AdminHeader` (admin nav with role-based visibility).
+- **/admin/login** sits **outside** `(panel)` so a sign-in screen structurally cannot render admin chrome for a session that does not exist yet.
+
+This pattern means a guest browsing `/calendar` and an admin browsing `/admin/bookings` have completely separate navigation chrome and database access patterns, with no code shared between the two except the database layer and a small set of business-logic functions.
+
+## Component system & shared primitives
+
+Built a minimal reusable component library in `src/components/ui` used across all 14 screens:
+
+- **Design tokens** (`styles.ts`): cx() helper, PAGE_BG, SURFACE, BORDER, TEXT_* color tokens, FOCUS_RING, CARD spacing — ensures visual consistency and keeps responsive breakpoints centralized.
+- **Form primitives** (`field.tsx`, `button.tsx`): TextField, TextAreaField, SelectField all wire id+label+aria-describedby automatically; Button and LinkButton separated to keep nav as `<a>` (next/link) and actions as `<button>`.
+- **Layout** (`card.tsx`): PageShell, PageHeader, CardPanel, DescriptionList, EmptyState — reused across every screen to reduce layout code duplication.
+- **Data display** (`table.tsx`): DataTable component with caption (required for a11y), columns, empty state, row rendering — bookings list, admin list.
+- **Messaging** (`alert.tsx`, `badge.tsx`): Alert tone variants (error, success, warning, info), status badges with calendarStateMeta() for day states, BookingStatusBadge for guest/admin dual interpretation.
+
+## Data fetching: Server components, no HTTP reads to own API
+
+Every screen is a server component that fetches directly from the database via Drizzle ORM. There are no `GET /bookings`, `GET /bookings/my`, or `GET /bookings/:id` endpoints — decided at Slice 12 that an app issuing HTTP requests to itself to re-authenticate and re-serialize rows it can already read is inefficient, so the pattern is:
+
+- Guest `/my-bookings`: server component queries bookings directly, scoped by `session.user.id`.
+- Admin `/admin/bookings`: server component calls `fetchAdminBookings()` from `src/lib/admin-bookings-service.ts`, passing filters from URL params (`?status=reserved&from=2026-09-10`). Same filter set that an endpoint would have taken, but applied as function arguments instead.
+- Admin `/admin/bookings/[id]`: calls `fetchAdminBooking()` with the same service module.
+
+If a future requirement (mobile app, third-party integration) needs HTTP reads, they would become thin wrappers over the existing service functions — query logic lives in one place rather than reimplemented per transport. See MAINTENANCE.md §14.
+
 ## Known trade-offs and deferred work
 Decisions taken with a known cost, each with the condition under which it should be revisited,
 are logged in `MAINTENANCE.md` — not repeated here. That file is the watch list for once the
