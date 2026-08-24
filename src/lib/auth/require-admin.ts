@@ -88,6 +88,23 @@ export async function requireAdmin(): Promise<AuthResult> {
 }
 
 /**
+ * Same lookup as `requireAdmin`, but returns `null` instead of a Response on
+ * failure — for routes where "not an admin" is not an error, just a signal to
+ * fall through to another auth path (e.g. GET /calendar/:date, which serves
+ * either an admin or a signed-in customer from the same URL, and must not
+ * write a 401/403 Response for the admin path when the caller turns out to be
+ * a customer instead).
+ *
+ * Collapses "no session", "deactivated admin" and "unknown admin id" to the
+ * same `null` — a caller using this only to decide which auth path applies
+ * does not need the distinction `requireAdmin`'s Response carries.
+ */
+export async function getOptionalAdmin(): Promise<AuthenticatedAdmin | null> {
+  const result = await requireAdmin();
+  return result.ok ? result.admin : null;
+}
+
+/**
  * Require a signed-in, active super admin.
  *
  * Note the role comes from the freshly-read database row, not the token, so

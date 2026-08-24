@@ -249,7 +249,38 @@ owner and the two admins.
 
 ---
 
-## 13. Verified by the owner
+## 13. No exclusion constraint on overlapping booking date ranges
+
+**What it does.** `POST /bookings` (Slice 8) and `POST /bookings/:id/vote` (Slice 9) both check
+for conflicts by querying, then writing — not by a database constraint that would refuse an
+overlapping row outright. Slice 8 narrows the gap by re-validating a second time inside the
+write transaction, immediately before the `INSERT`, using the identical pure validation function
+as the first check. Slice 9 narrows its own equivalent gap with `SELECT ... FOR UPDATE` on the
+booking row, which does fully serialize concurrent votes on the *same* booking.
+
+**Why not a real constraint.** A Postgres exclusion constraint on overlapping `[check_in,
+check_out)` ranges per `bookable_item_id` needs the `btree_gist` extension and a `daterange`
+column (or an expression index), which the schema does not currently have. Adding one is a
+migration, not a code change — deferred to keep Slice 8/9 scoped to application logic, matching
+this project's general bias toward the minimum that solves the stated problem.
+
+**The trade-off.** Two customers requesting the same room for overlapping nights, milliseconds
+apart, could both pass validation before either's `INSERT` commits — the re-validation-in-
+transaction mitigation narrows this window to roughly one round-trip, not zero. At this
+property's expected booking volume (one hotel/villa, admin-approved, no instant-book), the
+odds of two guests hitting the exact same night within that window are very low, and even if it
+happened, the two-admin approval step (Slice 9) is a second chance to catch it by eye before
+either booking is treated as confirmed.
+
+**Revisit when:** booking volume rises enough that this stops being a theoretical risk, or before
+opening booking to a much larger guest base. Add `btree_gist` + a `daterange` exclusion
+constraint on `bookings (bookable_item_id, daterange(check_in, check_out, '[)'))` filtered to
+`status IN ('reserved', 'booked')`, and let the database reject the second insert outright rather
+than relying on the transaction window.
+
+---
+
+## 14. Verified by the owner
 
 - [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
       name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session

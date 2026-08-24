@@ -17,11 +17,31 @@
       verified against a real booking on the live database.
       Slice 6 done: the public `GET /api/calendar` aggregate, driven through open/reserved/booked
       for both room-mode and villa-mode against real bookings on the live database.
-      **Next: Slice 7, the day-detail view (`GET /calendar/:date`).** Nothing further is needed
-      from the owner for Slices 7–11.
+      Slice 7 done: the day-detail view (`GET /calendar/:date`) — RoomStatus per item for a
+      customer, full guest + payment + ApprovalVote detail for an admin, from one shared
+      fetch-derive cycle. Verified against the live database with a real booking and vote.
+      Slice 8 done: booking creation (`POST /bookings`) — full FR5a validation (BookingWindow,
+      DayMode match, conflict detection, capacity), verified against the live database including
+      the multi-reason rejection case and the half-open boundary on both window and conflict
+      checks. Built with Sonnet 5 as an owner-approved exception to MODEL_SELECTION.md's Opus 5
+      recommendation — see the model note in API_DOCUMENTATION.md.
+      Slice 9 done: ApprovalVote (`POST /bookings/:id/vote`) — the two-admin approval mechanism,
+      with per-vote and per-status-change audit-log entries all inside one transaction, plus a
+      `SELECT ... FOR UPDATE` on the booking to serialize concurrent votes. Verified against the
+      live database with a second temporary admin: both the 2-approve → booked path and the
+      1-decline → declined path (with a prior approve standing) worked correctly; re-voting from
+      the same admin captured `previousVote: "approve"` without double-counting; a vote on an
+      already-resolved booking returned 409; the audit log captured every vote plus both status
+      transitions with denormalized admin names. Built with Opus 4.7 as an owner-approved
+      over-spec exception to MODEL_SELECTION.md's Sonnet 5 recommendation.
+      **Next: Slice 10, admin comprehensive booking update.** Nothing further is needed from the
+      owner for Slices 10–11.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
+
+**⚠️ MODEL SELECTION REQUIRED:** Before starting any slice, check [MODEL_SELECTION.md](MODEL_SELECTION.md) for the assigned Claude model. Claude will ask you to confirm before proceeding.
+
 - [x] Slice 1: Next.js + Postgres scaffold — **done. Applied to the live Neon database.**
       Built: Next 16 + TypeScript + Tailwind 4 scaffold; Drizzle schema for all 9 tables
       (`src/db/schema.ts`); generated migration (`drizzle/0000_initial_schema.sql`); connection
@@ -146,25 +166,106 @@
       the next day. Fixed with `export const dynamic = "force-dynamic"`; confirmed by rebuilding
       and checking the route listing flip from prerendered to dynamic, not just by reading the page
       in dev.
-- [ ] Slice 7: Day-detail endpoint (`GET /calendar/:date`) — customer view (RoomStatus, no
-      guest identity) vs admin view (full detail)
-- [ ] Slice 8: Booking creation (`POST /bookings`) — validate BookingWindow, every date in the
-      range (DayMode match, not `unavailable`, no conflict) and reject with the specific
-      conflicting date(s) named; validate `guests_count` against capacity; include
-      `advance_payment_notice` fixed text in the success response
-- [ ] Slice 9: ApprovalVote (`POST /bookings/:id/vote`) — 2-approve/1-decline logic +
-      booking_audit_log entries
+- [x] Slice 7: Day-detail endpoint (`GET /calendar/:date`) — **done and verified against the
+      live database.**
+      **Model used: Sonnet 5**, per MODEL_SELECTION.md.
+      Built as a pure derivation module (`src/lib/day-detail.ts`, 11 unit tests covering the
+      half-open boundary, distinct-room counting, and that RoomStatus collapses `reserved` and
+      `booked` to the same value) plus a DB-orchestration module
+      (`src/lib/day-detail-service.ts`) shared by the route, same split as Slices 5–6. Admin
+      enrichment (guest identity, payment stage, ApprovalVotes with the voting admin's name) is
+      added only in the service layer's admin path — never in the pure module — so there is no
+      code path where it could leak into a customer response by accident.
+      Added `getOptionalAdmin()` to `src/lib/auth/require-admin.ts` (thin wrapper around
+      `requireAdmin()`) so the route can try the admin path without writing a 401/403 Response
+      when the caller turns out to be a customer instead — `requireAdmin()`'s own behaviour,
+      including the distinct 403 for a deactivated admin, is unchanged.
+      Verified against the live database: 3 rooms read `open` with no bookings; a real
+      `reserved` room booking with a real ApprovalVote attached read `booked` with full detail
+      for the admin and only status/bookingId for the customer; a real `booked` villa booking
+      mirrored the same way; the booking's checkout day read `open` again once DayMode was set
+      there, confirming the half-open boundary against live data, not just the pure-module
+      tests; unauthenticated request 401'd; a date outside the 90-day window 400'd for the
+      customer only (admin unrestricted, per §9a). All test data removed afterward.
+
+- [x] Slice 8: Booking creation (`POST /bookings`) — **done and verified against the live
+      database.**
+      **Model used: Sonnet 5** — owner-approved one-off exception to MODEL_SELECTION.md's Opus 5
+      recommendation for this slice. Verification was scaled up accordingly (23 unit tests plus
+      a live-database pass covering every conflict-reason combination) to cover the risk Opus 5
+      was meant to address. See MODEL_SELECTION.md for the note on this exception.
+      Built as a pure validation module (`src/lib/booking.ts`) plus a DB-orchestration module
+      (`src/lib/booking-service.ts`) that re-validates a second time inside the write
+      transaction, immediately before the `INSERT`, to narrow the race window between the fetch
+      and the write — flagged as a mitigation, not a hard guarantee, since the schema has no
+      exclusion constraint on overlapping date ranges (see `MAINTENANCE.md`).
+      Validates, in order: item exists and is active; `check_out` after `check_in`;
+      `guests_count` against capacity; every night in the range against the BookingWindow; then
+      every night against DayMode-set/DayMode-match/existing-conflict, collecting ALL conflicting
+      nights (not just the first) with a distinct machine-readable reason each
+      (`unavailable` / `day_mode_mismatch` / `already_booked`) — no partial-booking, no
+      auto-splitting, per FR5a.
+      Verified against the live database: a clean 2-night booking succeeded with
+      `advancePaymentNotice`; a 7-night request spanning an existing booking, an unset date, and
+      a DayMode boundary was rejected naming all 4 conflicting nights with correct distinct
+      reasons and created nothing; a second booking starting exactly on the first one's checkout
+      day succeeded (half-open boundary against live data); over-capacity and wrong-item-kind
+      requests were each cleanly rejected; an out-of-window date was rejected naming the actual
+      window edges; Slice 7's day-detail endpoint immediately reflected the new booking as
+      `booked`. All test data removed afterward.
+
+- [x] Slice 9: ApprovalVote (`POST /bookings/:id/vote`) — **done and verified against the live
+      database.**
+      **Model used: Opus 4.7** — over-spec exception to MODEL_SELECTION.md's Sonnet 5
+      recommendation (opposite direction from Slice 8's under-spec exception, both logged per the
+      same protocol). Not incorrect, just heavier than needed for a straightforward state-machine
+      slice.
+      Built as a pure decision module (`src/lib/vote.ts`, 13 unit tests) plus a DB-orchestration
+      module (`src/lib/vote-service.ts`) that runs the vote write, any resulting status update,
+      and the audit-log entries in one transaction, with `SELECT ... FOR UPDATE` on the booking
+      row to serialize concurrent votes — two admins voting simultaneously cannot both read
+      `reserved` and both apply; one queues behind the other, sees the updated status, and gets
+      rejected 409 if the first vote resolved the booking.
+      Also added a `BookingStatus` type export to `src/db/schema.ts` (matching the existing
+      `DayModeKind` pattern), used by the pure module — pattern to follow for future enums.
+      Rules enforced: two distinct admins approving → `booked`; one decline (from either
+      required admin) → `declined` immediately with no tiebreaker; a re-vote overwrites the
+      admin's own prior vote via the unique constraint on `(booking_id, admin_id)`; a vote on a
+      booking already `booked` or `declined` returns 409 (stale-submission case).
+      Audit log: every vote writes an `approval_vote` row (`old_value` = previous vote or null,
+      `new_value` = new vote); when the vote also changes booking status, a second `status` row
+      is written in the same transaction with the from/to pair. Admin name is denormalized so
+      the trail reads correctly even if the admin is later renamed or deactivated.
+      Verified against the live database with a temporary second admin: two admins approving
+      moved booking through reserved → reserved → booked; re-vote from the same admin captured
+      `previousVote: "approve"` and did not double-count; the second booking's decline (with a
+      prior approve standing) moved straight to declined; a further vote on the already-booked
+      booking returned 409; the audit log captured all 3 votes plus both status transitions with
+      correct denormalized admin names; Slice 7's day-detail endpoint immediately reflected the
+      two approvals under the `approvals` array. All test data removed afterward — bookings
+      cascade to `approval_votes` and `booking_audit_log`, then the temp admin was deleted
+      (foreign-key ordering handled).
+
 - [ ] Slice 10: Admin comprehensive booking update (phone, payment stage, advance payment,
       internal notes) — same pattern as the earlier hotel project. **No currency symbol/field
       needed** — plain numeric amount, manual process.
+      **Model: Sonnet 5** — See MODEL_SELECTION.md before starting. Routine CRUD with precedent
+      pattern. Claude will ask to confirm model selection.
+
 - [ ] Slice 11: DefaultNotes + CustomNotes — admin edit, shown in booking flow (summary of
       terms/conditions per room, ~3 phrases per the owner's description — placeholder text
       until admin fills in real content via panel)
+      **Model: Haiku 4.5** — See MODEL_SELECTION.md before starting. Low complexity, straightforward
+      CRUD. Claude will ask to confirm model selection.
+
 - [ ] Slice 12: **Frontend screens (~14)** — guest: home, rooms/villa listing + detail, colour-coded
       calendar, day-detail, booking form, my-bookings; admin: login, bookings list, booking detail
       (vote/payment/history), calendar + DayMode controls, items manager w/ upload, notes editor,
       admin accounts. Mobile-first — most guests will book from a phone. **Not in the original
       slice list; roughly half the remaining work.**
+      **Model: Opus 5** ⭐ CRITICAL — See MODEL_SELECTION.md before starting. Largest remaining scope
+      (~50% of work), 14 screens across 2 user types, requires careful component architecture.
+      Claude will ask to confirm Opus 5 is selected.
 
 ## Discovered & resolved (grill session)
 - [x] Default DayMode for unset dates — no default, `unavailable` state.

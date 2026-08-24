@@ -1,0 +1,122 @@
+═══════════════════════════════════════════════════════════════════════════
+                    CLAUDE MODEL SELECTION QUICK REFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+⚠️  MANDATORY CHECK BEFORE EVERY TASK ⚠️
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before Claude starts ANY work on Slices 7–12:
+
+1. Claude identifies the slice
+2. Claude checks docs/MODEL_SELECTION.md
+3. Claude asks: "Have you verified [MODEL] is selected?"
+4. User confirms (or corrects) model selection
+5. Claude proceeds
+
+See: docs/CLAUDE_CHECKLIST.md for full process
+
+═══════════════════════════════════════════════════════════════════════════
+                             SLICE ASSIGNMENTS
+═══════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 7: Day-detail endpoint (GET /calendar/:date)     [DONE]           │
+│ Model: SONNET 5                                                         │
+│ Complexity: Medium                                                      │
+│ Verified against the live database                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 8: Booking creation (POST /bookings)             [DONE]           │
+│ Model recommended: ⭐ OPUS 5   |   Model used: SONNET 5 (exception)     │
+│ Complexity: HIGH — multi-constraint validation                         │
+│ Critical: FR5a edge cases (name conflicting dates)                      │
+│ Owner-approved exception — verified against live DB, 23 unit tests     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 9: ApprovalVote (POST /bookings/:id/vote)        [DONE]           │
+│ Model recommended: SONNET 5    |   Model used: OPUS 4.7 (over-spec)     │
+│ Complexity: Medium — clear state machine                               │
+│ 2-approve/1-decline logic + audit logging                              │
+│ Verified against live DB — 2 admins, both branches, audit log complete │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 10: Admin booking update                                         │
+│ Model: SONNET 5                                                         │
+│ Complexity: Medium — routine CRUD with precedent                       │
+│ Phone, payment stage, advance payment, notes                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 11: DefaultNotes + CustomNotes                                   │
+│ Model: HAIKU 4.5                                                        │
+│ Complexity: LOW — straightforward CRUD                                 │
+│ Admin edit endpoint, shown in booking flow                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ SLICE 12: Frontend screens (~14)                                        │
+│ Model: ⭐ OPUS 5                                                        │
+│ Complexity: VERY HIGH — ~50% of remaining work                         │
+│ 14 screens, 2 user types (guest + admin)                               │
+│ Needs: component architecture, routing, state patterns                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════
+                              MODEL OVERVIEW
+═══════════════════════════════════════════════════════════════════════════
+
+┌──────────────┬────────────────────────┬─────────┬────────────┐
+│ Model        │ Best For               │ Speed   │ Reasoning  │
+├──────────────┼────────────────────────┼─────────┼────────────┤
+│ Opus 5       │ High complexity,       │ Slower  │ Excellent  │
+│              │ Large UI systems       │         │            │
+│              │ (Slices 8, 12)         │         │            │
+├──────────────┼────────────────────────┼─────────┼────────────┤
+│ Sonnet 5     │ Most tasks, APIs,      │ Fast    │ Very Good  │
+│              │ Business logic, tests  │         │            │
+│              │ (Slices 7, 9, 10)      │         │            │
+├──────────────┼────────────────────────┼─────────┼────────────┤
+│ Haiku 4.5    │ Simple CRUD, docs      │ V. Fast │ Good       │
+│              │ Straightforward work   │         │            │
+│              │ (Slice 11)             │         │            │
+└──────────────┴────────────────────────┴─────────┴────────────┘
+
+═══════════════════════════════════════════════════════════════════════════
+                           WHAT CLAUDE MUST DO
+═══════════════════════════════════════════════════════════════════════════
+
+✅ BEFORE EVERY TASK:
+  ✓ Check MODEL_SELECTION.md
+  ✓ Ask user to confirm model selection
+  ✓ Wait for confirmation
+  ✓ Proceed only after confirmed
+
+✅ FOR SUBTASKS:
+  ✓ Inherit parent slice's model (usually)
+  ✓ If different model needed, ask user
+  ✓ Let user decide whether to switch
+
+❌ NEVER:
+  ✗ Start work without asking
+  ✗ Assume previous model is still selected
+  ✗ Skip the confirmation step
+  ✗ Proceed without user confirmation
+
+═══════════════════════════════════════════════════════════════════════════
+                            REFERENCE FILES
+═══════════════════════════════════════════════════════════════════════════
+
+📄 docs/MODEL_SELECTION.md   — Full model assignment guide
+📄 docs/CLAUDE_CHECKLIST.md  — Step-by-step process checklist
+📄 docs/tasks.md             — Slice descriptions with model assignments
+📄 CLAUDE.md                 — Project instructions (top-level)
+📄 MODEL_QUICK_REF.txt       — This file (quick lookup)
+
+═══════════════════════════════════════════════════════════════════════════
+                            REMEMBER:
+           This is a MANDATORY process for ALL remaining work.
+            Not optional. Claude MUST ask before every task.
+═══════════════════════════════════════════════════════════════════════════
