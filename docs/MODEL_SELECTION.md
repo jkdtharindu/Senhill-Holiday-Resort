@@ -16,7 +16,7 @@
 
 ## Slice Assignments & Model Requirements
 
-### ✅ COMPLETED (Slices 1–9)
+### ✅ COMPLETED (Slices 1–12) — all slices shipped
 No model checks needed — already shipped.
 
 - **Slice 7** used **Sonnet 5**, as planned. Pure module + service split held up well at this
@@ -26,12 +26,17 @@ No model checks needed — already shipped.
   combination. Outcome: zero defects.
 - **Slice 9** used **Opus 4.7** (Sonnet 5 recommended). Over-spec exception — no verification
   adjustment needed. Outcome: zero defects.
+- **Slice 10** used **Sonnet 5**, as planned. No exception. Outcome: zero defects.
+- **Slice 11** used **Haiku 4.5**, as planned. No exception. Outcome: zero defects.
+- **Slice 12** used **Opus 5**, as planned. No exception. Largest slice (14 screens);
+  outcome: zero defects in the new screens, plus four pre-existing issues found and fixed
+  (font override, open redirect, `<a>` internal links, duplicated a11y labels).
 
 See `docs/tasks.md` for the full verification log for each.
 
 ---
 
-### 🔄 IN PROGRESS (Slices 10–12)
+### Slice details — all shipped, kept for reference
 
 #### **Slice 7: Day-detail endpoint** → **SONNET 5** ⭐ (done)
 - **What:** `GET /calendar/:date` — customer view (RoomStatus, no guest identity) vs admin view (full detail)
@@ -110,7 +115,7 @@ See `docs/tasks.md` for the full verification log for each.
 
 ---
 
-#### **Slice 10: Admin booking update** → **SONNET 5**
+#### **Slice 10: Admin booking update** → **SONNET 5** (done)
 - **What:** Comprehensive booking update (phone, payment stage, advance payment, internal notes)
 - **Complexity:** Medium (routine CRUD, pattern precedent from earlier hotel project)
 - **Why Sonnet 5:**
@@ -127,7 +132,7 @@ See `docs/tasks.md` for the full verification log for each.
 
 ---
 
-#### **Slice 11: DefaultNotes + CustomNotes** → **HAIKU 4.5**
+#### **Slice 11: DefaultNotes + CustomNotes** → **HAIKU 4.5** (done)
 - **What:** Admin edit endpoint, shown in booking flow (placeholder text until admin fills in real content)
 - **Complexity:** Low (straightforward CRUD, no business logic)
 - **Why Haiku 4.5:**
@@ -143,7 +148,7 @@ See `docs/tasks.md` for the full verification log for each.
 
 ---
 
-#### **Slice 12: Frontend screens (~14)** → **OPUS 5** ⭐⭐ *CRITICAL*
+#### **Slice 12: Frontend screens (~14)** → **OPUS 5** ⭐⭐ *CRITICAL* (done)
 - **What:** Guest & admin pages — guest: home, rooms/villa listing + detail, colour-coded calendar, day-detail, booking form, my-bookings; admin: login, bookings list, booking detail (vote/payment/history), calendar + DayMode controls, items manager w/ upload, notes editor, admin accounts
 - **Complexity Factors:**
   - 14 separate screens across 2 user types

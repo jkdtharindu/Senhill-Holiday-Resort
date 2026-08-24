@@ -22,5 +22,10 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /*
+   * layout.tsx loads Geist and exposes it as --font-geist-sans, but this rule
+   * previously hard-coded Arial and overrode it, so the webfont was downloaded
+   * and never used. Falls back to the system stack if the font fails to load.
+   */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }

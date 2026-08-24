@@ -280,7 +280,29 @@ than relying on the transaction window.
 
 ---
 
-## 14. Verified by the owner
+## 14. Three read endpoints replaced by server-component reads
+
+`GET /bookings/my`, `GET /bookings` and `GET /bookings/:id` were specified before the frontend
+existed. Slice 12 built every screen that would have consumed them as a server component, which
+renders on the same server as the database — so calling them would have meant the app issuing an
+HTTP request to itself, re-authenticating and re-serialising rows it could already read.
+
+Owner decision at the start of Slice 12: skip the endpoints, read through service modules
+(`src/lib/admin-bookings-service.ts`, and a scoped query in `/my-bookings`). The filter set is
+unchanged; it moved from query parameters on an endpoint to arguments of `fetchAdminBookings`,
+and is still expressed as URL query parameters on `/admin/bookings` so a filtered view stays a
+shareable link.
+
+The trade-off accepted: there is currently no HTTP surface for booking reads. Anything outside
+this Next.js app — a mobile client, an integration, a reporting tool — would have nothing to call.
+
+**Revisit when:** something outside this app needs booking data. Build the three endpoints then as
+thin wrappers over the existing service functions, so the query logic still lives in one place
+rather than being reimplemented alongside them.
+
+---
+
+## 15. Verified by the owner
 
 - [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
       name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session

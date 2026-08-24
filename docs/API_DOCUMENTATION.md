@@ -269,14 +269,32 @@ thorough — 23 unit tests plus a live-database pass exercising every conflict-r
 specifically because this is the multi-constraint validation MODEL_SELECTION.md flagged as
 highest-risk.
 
-### `GET /bookings/my` — customer
-Own bookings, with current status.
+### `GET /bookings/my` — customer — **not built, by decision (Slice 12)**
+### `GET /bookings` — admin — **not built, by decision (Slice 12)**
+### `GET /bookings/:id` — admin — **not built, by decision (Slice 12)**
 
-### `GET /bookings` — admin
-Filter by `status`, `bookable_item_id`, `from`, `to`, `q` (name/phone/email search).
+These three read endpoints were specified before the frontend existed. When Slice 12 built the
+screens that would have consumed them, every page turned out to be a server component rendering
+on the same server as the database — so calling them would have meant a page issuing an HTTP
+request to itself, re-authenticating and re-serialising rows it could read directly.
 
-### `GET /bookings/:id` — admin
-Full detail + `approval_votes` + `history` (audit log).
+Owner decision at the start of Slice 12: **skip the endpoints, read through service modules
+instead.** The equivalent reads now live in:
+
+| Was going to be | Is now | Used by |
+|---|---|---|
+| `GET /bookings/my` | a scoped query in the page itself | `/my-bookings` |
+| `GET /bookings` | `fetchAdminBookings()` in `src/lib/admin-bookings-service.ts` | `/admin/bookings` |
+| `GET /bookings/:id` | `fetchAdminBooking()` in the same module | `/admin/bookings/[id]` |
+
+The filter set survives unchanged — `status`, `bookable_item_id`, `from`, `to` and a
+name/phone/email `q` search are the arguments to `fetchAdminBookings`, and appear as URL query
+parameters on `/admin/bookings` so a filtered view stays a shareable link.
+
+**Revisit when** something outside this Next.js app needs booking data — a mobile client, or an
+integration. At that point these become real endpoints wrapping the same service functions, so
+there is still one place the query logic lives. Logged in `MAINTENANCE.md`, not carried as open
+work.
 
 ### `POST /bookings/:id/vote` — admin — as built, done
 Cast an ApprovalVote. Any signed-in, active admin may vote (no super-admin restriction, per FR9).
@@ -330,23 +348,89 @@ one). Not incorrect, just heavier than needed for a straightforward state-machin
 Logged per the exception protocol in MODEL_SELECTION.md so both directions get treated the
 same way.
 
-### `PUT /bookings/:id` — admin
-Update guest info, phone (compulsory), payment_stage, advance_amount/date, internal_notes.
-Same comprehensive-update pattern as before — every changed field logged to `booking_audit_log`.
+### `PUT /bookings/:id` — admin — as built, done
+Comprehensive update: `guestName`, `phone` (compulsory, cannot be blanked), `email`,
+`paymentStage` (`unpaid`\|`advance_paid`\|`fully_paid`\|`refunded`), `advanceAmount`,
+`advancePaidDate`, `internalNotes`. All fields optional in the request body — only the ones
+present are validated and written. Request body is `.strict()` — an unrecognized key (including
+`status`) is rejected 400 rather than silently ignored.
+```json
+{ "phone": "0779999999", "paymentStage": "advance_paid", "advanceAmount": "50.00" }
+```
 Does **not** change `status` directly — status only changes via `/vote` or an explicit cancel
-endpoint (not yet built).
+endpoint (not yet built), so an admin cannot sidestep the two-admin approval process through this
+route.
+
+Response:
+```json
+{ "changedFields": ["phone", "payment_stage", "advance_amount"] }
+```
+An empty patch (no fields present) is rejected 400. A patch where every present field already
+matches the current value succeeds with `changedFields: []` and writes nothing to
+`booking_audit_log`.
+
+Implemented as a pure diff/validation module (`src/lib/booking-update.ts`, unit tests covering
+no-op detection, blank-phone/blank-name rejection, negative/non-numeric advance amount rejection,
+malformed date rejection, and exact field-diff output) plus a DB-orchestration module
+(`src/lib/booking-update-service.ts`) that locks the booking row (`SELECT ... FOR UPDATE`),
+computes the diff, and writes the update plus one `booking_audit_log` row per changed field in a
+single transaction.
+
+Verified against the live database: unauthenticated → 401; an empty `{}` body → 400; a
+whitespace-only `phone` → 400; a request naming an unknown key (`status`) → 400 rather than
+silently ignored; a 404 on an unknown booking id; a real multi-field update (phone, payment
+stage, advance amount, advance paid date, internal notes) persisted correctly and produced exactly
+one `booking_audit_log` row per changed field with correct old/new values and the admin's
+denormalized name; `status` and every untouched field were left unchanged. All test data removed
+afterward.
 
 ---
 
 ## Site Settings
 
-### `GET /site-settings`
-Public. Returns `default_notes`.
+### `GET /site-settings` — public — as built, done
+Returns the site-wide `default_notes` (booking terms shown to every customer in the booking flow).
+Cached/polled by customers on page load; updated by admins through `PUT /site-settings` below.
 
-### `PUT /site-settings` — admin
+Response:
 ```json
-{ "default_notes": "Check-in from 2pm..." }
+{ "defaultNotes": "Check-in from 2pm. WiFi password on the fridge..." }
 ```
+
+Implemented as a direct read-query in the route handler (no caching layer — the database is the
+authority).
+
+Verified against the live database: public access (no auth required) returns the current notes,
+and every update via `PUT` appears immediately on the next `GET`.
+
+### `PUT /site-settings` — admin — as built, done
+Update site-wide booking terms. `defaultNotes` is optional in the request body — if absent,
+nothing changes. If present, it must be non-blank (whitespace-only rejected 400).
+
+Request:
+```json
+{ "defaultNotes": "Check-in from 2pm. WiFi password on the fridge. No loud noise after 10pm." }
+```
+
+Response:
+```json
+{ "changed": true }
+```
+or
+```json
+{ "changed": false }
+```
+A `PUT` to the same value succeeds with `changed: false` — idempotent, no error.
+
+Implemented as a pure validation module (`src/lib/site-settings.ts`, unit tests covering
+no-op detection, blank-value rejection, multiline text, and change detection) plus a
+DB-orchestration module (`src/lib/site-settings-service.ts`) that fetches the current value,
+validates the patch, and writes the update with `updated_by` and `updated_at` denormalization.
+
+Verified against the live database: unauthenticated → 401; empty `{}` body → `changed: false`;
+blank `defaultNotes` → 400 with clear message; a real update → `changed: true` and persisted
+correctly; `GET` immediately sees the new value; re-PUTting the same value → `changed: false`.
+No audit log per the schema — only the `updated_by` and `updated_at` fields track history.
 
 ---
 

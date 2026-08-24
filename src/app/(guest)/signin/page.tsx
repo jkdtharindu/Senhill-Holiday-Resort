@@ -1,7 +1,20 @@
+/**
+ * Customer sign-in (Slice 3; rebuilt onto the shared component system and
+ * given return-to-page support in Slice 12).
+ *
+ * The `next` parameter lets the day-detail and booking screens send a guest
+ * here and get them back to where they were. It is validated, not trusted:
+ * see `safeNext` below.
+ */
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
+import { Alert } from "@/components/ui/alert";
+import { CardPanel, PageShell } from "@/components/ui/card";
+import { cx, EYEBROW, TEXT_BODY, TEXT_HEADING, TEXT_MUTED } from "@/components/ui/styles";
+import { safeNext } from "@/lib/safe-next";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -17,52 +30,47 @@ const ERROR_MESSAGES: Record<string, string> = {
     "That email address is already associated with a different sign-in method.",
 };
 
-export default async function SignInPage({
-  searchParams,
-}: PageProps<"/signin">) {
-  if (await auth()) redirect("/");
-
+export default async function SignInPage({ searchParams }: PageProps<"/signin">) {
   const params = await searchParams;
+  const next = safeNext(params.next);
+
+  // Already signed in — no reason to show a sign-in screen.
+  if (await auth()) redirect(next);
+
   const errorCode = typeof params.error === "string" ? params.error : null;
-  const errorMessage = errorCode
-    ? (ERROR_MESSAGES[errorCode] ??
-      "Something went wrong signing you in. Please try again.")
-    : null;
+  const errorMessage =
+    errorCode !== null
+      ? (ERROR_MESSAGES[errorCode] ??
+        "Something went wrong signing you in. Please try again.")
+      : null;
 
   return (
-    <main className="min-h-dvh bg-stone-100 px-6 py-16 dark:bg-stone-950">
-      <div className="mx-auto flex w-full max-w-sm flex-col gap-8">
-        <header className="flex flex-col gap-2">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-teal-800 dark:text-teal-500">
-            Senhill Holiday Resort
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
-            Sign in to book
-          </h1>
-          <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-            You can browse the rooms and check which dates are free without an
-            account. Signing in is only needed to request a stay and follow its
-            progress.
-          </p>
-        </header>
+    <PageShell width="narrow" className="max-w-sm">
+      <header className="flex flex-col gap-2">
+        <p className={EYEBROW}>Senhill Holiday Resort</p>
+        <h1 className={cx("text-2xl font-semibold tracking-tight", TEXT_HEADING)}>
+          Sign in to book
+        </h1>
+        <p className={cx("text-sm leading-relaxed", TEXT_BODY)}>
+          You can browse the rooms and check which dates are free without an
+          account. Signing in is only needed to request a stay and follow its
+          progress.
+        </p>
+      </header>
 
-        {errorMessage && (
-          <p
-            role="alert"
-            className="rounded-md border border-red-300 bg-red-50 px-3 py-2.5 text-sm leading-relaxed text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-          >
-            {errorMessage}
-          </p>
-        )}
+      {errorMessage !== null && <Alert tone="error">{errorMessage}</Alert>}
 
+      <CardPanel>
         {/*
           A server action rather than a client component: the form works with
           no JavaScript, and there is no OAuth logic in the browser bundle.
+          `next` is closed over from the already-validated value above — the
+          action never re-reads it from the request.
         */}
         <form
           action={async () => {
             "use server";
-            await signIn("google", { redirectTo: "/" });
+            await signIn("google", { redirectTo: next });
           }}
         >
           <button
@@ -73,13 +81,13 @@ export default async function SignInPage({
             Continue with Google
           </button>
         </form>
+      </CardPanel>
 
-        <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-500">
-          We receive your name and email address from Google, and nothing else.
-          Your phone number is asked for later, on the booking form itself.
-        </p>
-      </div>
-    </main>
+      <p className={cx("text-xs leading-relaxed", TEXT_MUTED)}>
+        We receive your name and email address from Google, and nothing else.
+        Your phone number is asked for later, on the booking form itself.
+      </p>
+    </PageShell>
   );
 }
 

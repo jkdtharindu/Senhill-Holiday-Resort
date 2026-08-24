@@ -34,8 +34,45 @@
       already-resolved booking returned 409; the audit log captured every vote plus both status
       transitions with denormalized admin names. Built with Opus 4.7 as an owner-approved
       over-spec exception to MODEL_SELECTION.md's Sonnet 5 recommendation.
-      **Next: Slice 10, admin comprehensive booking update.** Nothing further is needed from the
-      owner for Slices 10–11.
+      Slice 10 done: admin comprehensive booking update (`PUT /bookings/:id`) — guestName, phone
+      (compulsory), email, paymentStage, advanceAmount, advancePaidDate, internalNotes, all
+      optional per-request and diffed against current values so a no-op patch writes nothing to
+      `booking_audit_log`. Deliberately excludes `status` (rejected 400 via a `.strict()` body
+      schema) — status only changes via `/vote` or a future cancel endpoint. Built with Sonnet 5
+      per MODEL_SELECTION.md, no exception. Verified against the live database: 401 unauthenticated,
+      400 on an empty patch, 400 on a blank phone, 400 on an unrecognized key, 404 on an unknown
+      booking id, and a real multi-field update that produced exactly one audit-log row per
+      changed field with correct old/new values and the admin's denormalized name, with `status`
+      and untouched fields left alone. All test data removed afterward.
+      Slice 11 done: site-wide settings (`GET /site-settings` public, `PUT /site-settings` admin)
+      — `default_notes` is the site-wide booking terms shown to customers in the booking flow.
+      Built with Haiku 4.5 per MODEL_SELECTION.md, no exception. Verified against the live
+      database: public GET succeeds without auth, admin PUT with auth succeeds or fails as
+      expected (unauth 401, blank notes 400, empty patch changed: false, real update persisted
+      and immediately visible via GET). All expected behaviors confirmed; database restored to
+      baseline.
+      Slice 12 done: all 14 frontend screens, built with Opus 5 per MODEL_SELECTION.md, no
+      exception. Guest: home, rooms listing, room detail, calendar, day-detail, booking form,
+      my-bookings, sign-in. Admin: login, dashboard, bookings list, booking detail
+      (vote/payment/history), calendar + DayMode controls, items manager with photo upload,
+      notes editor, accounts. Built on a shared component system (`src/components/ui`,
+      `src/components/layout`) with route-group layouts — `(guest)` and `admin/(panel)` — that
+      add no URL segment, so every existing URL is unchanged. `/admin/login` sits outside
+      `(panel)` so a sign-in screen structurally cannot render nav for a session that does not
+      exist. Three read endpoints were deliberately not built; see MAINTENANCE.md #14.
+      Verified against the live database: all 7 admin screens 307 to login when signed out and
+      200 when signed in; the two-admin approval path drove a real booking reserved -> reserved
+      -> booked with a third vote correctly rejected 409; DayModeSwitchBlock refused the 3 booked
+      nights while updating the 2 free ones; the FR5a rejection rendered per-date with the
+      half-open boundary correct (the 13th and 14th absent, as they should be); the audit trail
+      rendered all 6 entries newest-first in Asia/Colombo time; capacity reduction below an
+      existing booking returned 409 and is surfaced as an explicit override rather than a
+      silent `force`. Production build succeeds. Fixed along the way: a `font-family: Arial`
+      rule that overrode the loaded Geist webfont, an unvalidated `?next=` open redirect (now
+      `src/lib/safe-next.ts`, 13 tests), 21 `<a>` internal links causing full page reloads, and
+      duplicated accessible names on every calendar cell.
+      All Slice 12 verification data removed afterwards (booking, day modes, temporary admin);
+      seeded placeholder notes restored.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
 
 ## Next To Do ○ (suggested build order — vertical slices)
@@ -258,7 +295,7 @@
       **Model: Haiku 4.5** — See MODEL_SELECTION.md before starting. Low complexity, straightforward
       CRUD. Claude will ask to confirm model selection.
 
-- [ ] Slice 12: **Frontend screens (~14)** — guest: home, rooms/villa listing + detail, colour-coded
+- [x] Slice 12: **Frontend screens (~14)** — **done and verified against the live database.** — guest: home, rooms/villa listing + detail, colour-coded
       calendar, day-detail, booking form, my-bookings; admin: login, bookings list, booking detail
       (vote/payment/history), calendar + DayMode controls, items manager w/ upload, notes editor,
       admin accounts. Mobile-first — most guests will book from a phone. **Not in the original

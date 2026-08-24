@@ -326,6 +326,8 @@ export type DayModeKind = (typeof dayModeKind.enumValues)[number];
 export type Booking = typeof bookings.$inferSelect;
 /** `reserved` | `booked` | `declined` — the three values the `booking_status` enum allows. */
 export type BookingStatus = (typeof bookingStatus.enumValues)[number];
+/** `unpaid` | `advance_paid` | `fully_paid` | `refunded` — the `payment_stage` enum values. */
+export type PaymentStage = (typeof paymentStage.enumValues)[number];
 export type ApprovalVote = typeof approvalVotes.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type BookingAuditLog = typeof bookingAuditLog.$inferSelect;

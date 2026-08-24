@@ -1,7 +1,21 @@
 "use client";
 
+/**
+ * Staff sign-in form (Slice 2; moved onto the shared field primitives in
+ * Slice 12).
+ *
+ * The failure message is whatever the endpoint returns, verbatim. Slice 2
+ * makes a wrong password and an unknown email byte-identical on purpose, so
+ * this must not add any local reasoning about which one it was.
+ */
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/field";
+import { cx, TEXT_MUTED } from "@/components/ui/styles";
 
 export function AdminLoginForm() {
   const router = useRouter();
@@ -32,8 +46,9 @@ export function AdminLoginForm() {
         return;
       }
 
-      // refresh() so the server component re-reads the new session cookie;
-      // push() alone can serve a cached tree that still thinks nobody is signed in.
+      // refresh() so the server components re-read the new session cookie;
+      // replace() alone can serve a cached tree that still thinks nobody is
+      // signed in.
       router.replace("/admin");
       router.refresh();
     } catch {
@@ -46,64 +61,35 @@ export function AdminLoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-      {error !== null && (
-        <p
-          role="alert"
-          className="rounded-md border border-red-300 bg-red-50 px-3 py-2.5 text-sm leading-relaxed text-red-900 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200"
-        >
-          {error}
-        </p>
-      )}
+      {error !== null && <Alert tone="error">{error}</Alert>}
 
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="email"
-          className="text-sm font-medium text-stone-800 dark:text-stone-200"
-        >
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={submitting}
-          className="rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus-visible:border-teal-700 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="password"
-          className="text-sm font-medium text-stone-800 dark:text-stone-200"
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={submitting}
-          className="rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-900 outline-none focus-visible:border-teal-700 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100"
-        />
-      </div>
-
-      <button
-        type="submit"
+      <TextField
+        id="email"
+        label="Email"
+        type="email"
+        required
+        autoComplete="username"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
         disabled={submitting}
-        className="mt-1 rounded-md bg-teal-800 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-60 dark:bg-teal-700 dark:hover:bg-teal-600"
-      >
-        {submitting ? "Signing in…" : "Sign in"}
-      </button>
+      />
 
-      <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-500">
+      <TextField
+        id="password"
+        label="Password"
+        type="password"
+        required
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        disabled={submitting}
+      />
+
+      <Button type="submit" disabled={submitting}>
+        {submitting ? "Signing in…" : "Sign in"}
+      </Button>
+
+      <p className={cx("text-xs leading-relaxed", TEXT_MUTED)}>
         Forgot your password? Ask a super admin to reset it — there is no
         self-service reset, so nobody can take over an account through an email
         inbox.
