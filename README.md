@@ -5,12 +5,12 @@ Senhill Holiday Resort's booking platform: individual rooms or the whole villa, 
 per-day mode (room basis vs. villa-only basis), two-admin approval before a booking is confirmed,
 and manual payment tracking.
 
-**Status: Slices 1–6 built and verified against the live database (2026-08-23).** Scaffold,
-schema, both auth systems (admin email/password and guest Google sign-in), room/villa/photo
-management, DayMode assignment with the DayModeSwitchBlock, and the public calendar — including a
-visual `/calendar` page, not just the API. Second admin account created; still waiting on the
-owner for real room inventory (names/capacities) and the DefaultNotes/AdvancePaymentNotice
-wording. See `docs/tasks.md` for the full build order and decision history.
+**Status: Slices 1–12 complete and deployed to Vercel (2026-08-25).** Live at
+https://senhill-holiday-resort.vercel.app. Full stack: Next.js + Postgres (Neon) + NextAuth.js
+(Google Sign-In for guests, email/password for admins), all 14 frontend screens (7 guest + 7 admin),
+all API endpoints, DayMode switching with conflict detection, two-admin booking approval, payment
+tracking, audit logging. Awaiting owner for final content (room names/capacities, branding, notes).
+See `docs/tasks.md` for the full build order and `docs/DEPLOYMENT_STATUS.md` for deployment log.
 
 ## Getting started
 
@@ -98,7 +98,7 @@ status). Only admins see guest identity and full booking details.
 - **First Super Admin:** supplied via `SEED_SUPER_ADMIN_EMAIL` in `.env.local` (seeded at
   Slice 2). Deliberately not committed — this repo is public, and naming the highest-privilege
   account in it is free reconnaissance for anyone reading. See `.env.example`.
-- **Hosting:** Vercel, confirmed. Database: Neon, live (Singapore region).
+- **Hosting:** Vercel (live: https://senhill-holiday-resort.vercel.app, deployed 2026-08-25). Database: Neon, live (Singapore region, same for local and production).
 - **Room/Villa content:** the upload/edit panel is built (Slice 4) and real property photos are
   loaded. Room names and capacities are still the seeded placeholders — real values are still
   needed from the owner.

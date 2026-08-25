@@ -87,7 +87,11 @@
       Verified against the live database: 9 tables created (10 after Slice 2 added
       `admin_login_attempts`); seed applied and confirmed idempotent on re-run; check
       constraints reject `check_out <= check_in`, zero-night stays, zero guests, and any
-      booking status outside the enum. Remaining: first deploy to Vercel.
+      booking status outside the enum.
+      **2026-08-25: First Vercel deploy complete.** App is live at
+      https://senhill-holiday-resort.vercel.app. Environment variables configured,
+      database migrations applied to production Neon, admin login and guest auth both
+      working. See `docs/DEPLOYMENT_STATUS.md` for checklist and verification log.
 - [x] Slice 2: Admin auth — **done and verified against the live database.**
       Built: bcrypt password hashing (cost 12, 12-char minimum); JWT sessions in an httpOnly
       SameSite=lax cookie, 8-hour expiry, signed with `ADMIN_JWT_SECRET` and refused if that
