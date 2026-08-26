@@ -61,7 +61,13 @@ export async function POST(
   });
 
   if (!result.ok) {
-    return Response.json({ error: result.error }, { status: result.status });
+    return Response.json(
+      {
+        error: result.error,
+        ...("blockedBy" in result ? { blocked_by: result.blockedBy } : {}),
+      },
+      { status: result.status },
+    );
   }
 
   return Response.json({

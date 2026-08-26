@@ -316,6 +316,20 @@ Cast an ApprovalVote. Any signed-in, active admin may vote (no super-admin restr
 - Voting on a booking whose status is already `booked` or `declined` returns 409 — the two-admin
   process is closed on it, and a late vote is treated as a stale form submission rather than a
   legitimate action.
+- **Added 2026-08-27 — approval queue.** An `approve` vote returns 409 if another `reserved`
+  booking on the *same item*, with *overlapping dates*, has a stronger claim (see
+  `MAINTENANCE.md` §13 and `src/lib/vote.ts`'s `findApprovalQueueBlocker`). Priority: a booking
+  with an advance payment recorded outranks one without, regardless of which was submitted first;
+  otherwise earlier submission wins. The response names the stronger booking so the admin can
+  jump to it:
+  ```json
+  {
+    "error": "Jane Doe's booking for overlapping dates was received first — decide that one before approving this one.",
+    "blocked_by": { "bookingId": "...", "guestName": "Jane Doe" }
+  }
+  ```
+  `decline` is **never** blocked this way — declining only frees a date, so there is nothing to
+  jump ahead of.
 
 Response:
 ```json

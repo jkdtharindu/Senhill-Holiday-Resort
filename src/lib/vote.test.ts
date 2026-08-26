@@ -14,7 +14,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { decideVoteOutcome, deriveStatusFromVotes, type StandingVote } from "./vote.ts";
+import {
+  decideVoteOutcome,
+  deriveStatusFromVotes,
+  findApprovalQueueBlocker,
+  type CompetingBooking,
+  type StandingVote,
+} from "./vote.ts";
 
 const ALICE = "admin-alice";
 const BOB = "admin-bob";
@@ -154,5 +160,143 @@ describe("decideVoteOutcome — approver diversity", () => {
 describe("deriveStatusFromVotes — edge cases", () => {
   it("empty vote list is reserved", () => {
     assert.equal(deriveStatusFromVotes([]), "reserved");
+  });
+});
+
+describe("findApprovalQueueBlocker — priority: advance payment beats submission order", () => {
+  const target = { createdAt: new Date("2026-01-10T00:00:00Z"), advancePaidDate: null };
+
+  it("returns null with no competitors", () => {
+    assert.equal(findApprovalQueueBlocker(target, []), null);
+  });
+
+  it("an unpaid competitor submitted earlier outranks an unpaid target", () => {
+    const earlier: CompetingBooking = {
+      id: "b1",
+      guestName: "Earlier Guest",
+      createdAt: new Date("2026-01-05T00:00:00Z"),
+      advancePaidDate: null,
+    };
+    assert.deepEqual(findApprovalQueueBlocker(target, [earlier]), earlier);
+  });
+
+  it("an unpaid competitor submitted later does NOT outrank an unpaid target", () => {
+    const later: CompetingBooking = {
+      id: "b2",
+      guestName: "Later Guest",
+      createdAt: new Date("2026-01-15T00:00:00Z"),
+      advancePaidDate: null,
+    };
+    assert.equal(findApprovalQueueBlocker(target, [later]), null);
+  });
+
+  it("a paid competitor outranks an unpaid target even if submitted later", () => {
+    const paidLater: CompetingBooking = {
+      id: "b3",
+      guestName: "Paid Later Guest",
+      createdAt: new Date("2026-01-20T00:00:00Z"),
+      advancePaidDate: "2026-01-21",
+    };
+    assert.deepEqual(findApprovalQueueBlocker(target, [paidLater]), paidLater);
+  });
+
+  it("an unpaid target does not outrank itself when the target has ALSO paid earlier", () => {
+    const paidTarget = { createdAt: new Date("2026-01-10T00:00:00Z"), advancePaidDate: "2026-01-11" };
+    const unpaidCompetitor: CompetingBooking = {
+      id: "b4",
+      guestName: "Unpaid Competitor",
+      createdAt: new Date("2026-01-01T00:00:00Z"), // submitted first, but never paid
+      advancePaidDate: null,
+    };
+    // The target paid — that beats an unpaid competitor regardless of submission order.
+    assert.equal(findApprovalQueueBlocker(paidTarget, [unpaidCompetitor]), null);
+  });
+
+  it("between two paid competitors, the earlier advance-payment date wins", () => {
+    const paidTarget = { createdAt: new Date("2026-01-10T00:00:00Z"), advancePaidDate: "2026-01-15" };
+    const paidEarlier: CompetingBooking = {
+      id: "b5",
+      guestName: "Paid First",
+      createdAt: new Date("2026-01-12T00:00:00Z"), // submitted AFTER target
+      advancePaidDate: "2026-01-13", // but paid BEFORE target's payment
+    };
+    assert.deepEqual(findApprovalQueueBlocker(paidTarget, [paidEarlier]), paidEarlier);
+  });
+
+  it("with three competitors, returns only the single strongest blocker", () => {
+    const weakest: CompetingBooking = {
+      id: "b6",
+      guestName: "Weakest",
+      createdAt: new Date("2026-01-04T00:00:00Z"),
+      advancePaidDate: null,
+    };
+    const strongest: CompetingBooking = {
+      id: "b7",
+      guestName: "Strongest",
+      createdAt: new Date("2026-01-25T00:00:00Z"),
+      advancePaidDate: "2026-01-05", // paid earliest of all
+    };
+    const middle: CompetingBooking = {
+      id: "b8",
+      guestName: "Middle",
+      createdAt: new Date("2026-01-02T00:00:00Z"),
+      advancePaidDate: null,
+    };
+    assert.deepEqual(
+      findApprovalQueueBlocker(target, [weakest, strongest, middle]),
+      strongest,
+    );
+  });
+});
+
+describe("decideVoteOutcome — approval queue blocking", () => {
+  const BLOCKER: CompetingBooking = {
+    id: "earlier-booking",
+    guestName: "Earlier Guest",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    advancePaidDate: null,
+  };
+
+  it("an approve is rejected outright when a queueBlocker is passed", () => {
+    const outcome = decideVoteOutcome(
+      "reserved",
+      [],
+      { adminId: ALICE, vote: "approve" },
+      BLOCKER,
+    );
+    assert.deepEqual(outcome, {
+      action: "rejected",
+      reason: "earlier_claim_pending",
+      blocker: BLOCKER,
+    });
+  });
+
+  it("a decline is NEVER blocked by queueBlocker — only approve locks a date", () => {
+    const outcome = decideVoteOutcome(
+      "reserved",
+      [],
+      { adminId: ALICE, vote: "decline" },
+      BLOCKER,
+    );
+    assert.equal(outcome.action, "applied");
+  });
+
+  it("an approve proceeds normally when queueBlocker is null (the default)", () => {
+    const outcome = decideVoteOutcome("reserved", [], { adminId: ALICE, vote: "approve" });
+    assert.equal(outcome.action, "applied");
+  });
+
+  it("the already-resolved check still takes priority over queueBlocker", () => {
+    const outcome = decideVoteOutcome(
+      "booked",
+      [],
+      { adminId: ALICE, vote: "approve" },
+      BLOCKER,
+    );
+    assert.deepEqual(outcome, {
+      action: "rejected",
+      reason: "booking_already_resolved",
+      currentStatus: "booked",
+    });
   });
 });

@@ -17,7 +17,7 @@
  * is later renamed or deactivated.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gt, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -26,7 +26,12 @@ import {
   bookings,
   type BookingStatus,
 } from "@/db/schema";
-import { decideVoteOutcome, type StandingVote } from "./vote";
+import {
+  decideVoteOutcome,
+  findApprovalQueueBlocker,
+  type CompetingBooking,
+  type StandingVote,
+} from "./vote";
 
 export interface CastVoteInput {
   bookingId: string;
@@ -44,7 +49,8 @@ export type CastVoteResult =
       statusChanged: boolean;
     }
   | { ok: false; status: 404; error: string }
-  | { ok: false; status: 409; error: string; currentStatus: BookingStatus };
+  | { ok: false; status: 409; error: string; currentStatus: BookingStatus }
+  | { ok: false; status: 409; error: string; blockedBy: { bookingId: string; guestName: string } };
 
 /**
  * Cast (or overwrite) one admin's vote on a booking, atomically updating
@@ -62,7 +68,15 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
     // updated status, and (correctly) get rejected 409 if the first vote
     // resolved the booking.
     const [booking] = await tx
-      .select({ id: bookings.id, status: bookings.status })
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        bookableItemId: bookings.bookableItemId,
+        checkIn: bookings.checkIn,
+        checkOut: bookings.checkOut,
+        createdAt: bookings.createdAt,
+        advancePaidDate: bookings.advancePaidDate,
+      })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
       .for("update")
@@ -82,12 +96,54 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
       vote: v.vote,
     }));
 
-    const outcome = decideVoteOutcome(booking.status, standing, {
-      adminId: input.adminId,
-      vote: input.vote,
-    });
+    // Only fetched for an approve vote — a decline never needs the queue
+    // check, since it only frees a date rather than locking one (owner
+    // decision, 2026-08-27; see docs/MAINTENANCE.md §13 and lib/vote.ts).
+    let queueBlocker: CompetingBooking | null = null;
+    if (input.vote === "approve") {
+      const competitors = await tx
+        .select({
+          id: bookings.id,
+          guestName: bookings.guestName,
+          createdAt: bookings.createdAt,
+          advancePaidDate: bookings.advancePaidDate,
+        })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.bookableItemId, booking.bookableItemId),
+            eq(bookings.status, "reserved"),
+            ne(bookings.id, booking.id),
+            lte(bookings.checkIn, booking.checkOut),
+            gt(bookings.checkOut, booking.checkIn),
+          ),
+        );
+
+      queueBlocker = findApprovalQueueBlocker(
+        { createdAt: booking.createdAt, advancePaidDate: booking.advancePaidDate },
+        competitors,
+      );
+    }
+
+    const outcome = decideVoteOutcome(
+      booking.status,
+      standing,
+      { adminId: input.adminId, vote: input.vote },
+      queueBlocker,
+    );
 
     if (outcome.action === "rejected") {
+      if (outcome.reason === "earlier_claim_pending") {
+        return {
+          ok: false,
+          status: 409 as const,
+          error:
+            `${outcome.blocker.guestName}'s booking for overlapping dates was received first` +
+            (outcome.blocker.advancePaidDate ? " and has an advance payment recorded" : "") +
+            " — decide that one before approving this one.",
+          blockedBy: { bookingId: outcome.blocker.id, guestName: outcome.blocker.guestName },
+        };
+      }
       return {
         ok: false,
         status: 409 as const,

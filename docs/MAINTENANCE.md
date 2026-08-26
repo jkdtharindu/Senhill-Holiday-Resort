@@ -280,6 +280,19 @@ an exclusion constraint on `bookings (bookable_item_id, daterange(check_in, chec
 Note: filtered to `status = 'booked'` ONLY, not `'reserved'`, so the constraint only applies to
 confirmed bookings.
 
+**Approval queue (added 2026-08-27).** Allowing several `reserved` bookings to compete for the
+same dates raised an obvious follow-up: which one should an admin approve? `POST
+/bookings/:id/vote` now hard-blocks an `approve` vote (409) if another `reserved` booking on the
+same item, overlapping dates, has a stronger claim — see `findApprovalQueueBlocker` in
+`src/lib/vote.ts`. Priority order, owner decision 2026-08-27: a booking with an advance payment
+recorded (`advancePaidDate` set) always outranks one without, regardless of submission order —
+the payment is what actually secures the date. Between two unpaid bookings, or two paid ones,
+earlier wins (submission time, or payment date, respectively). The blocked response names the
+stronger booking (`blocked_by: { bookingId, guestName }`) so the admin can jump straight to it.
+`decline` is never blocked this way — declining only frees a date, so there is nothing to jump
+ahead of. This is a hard block, not a dismissable warning, per owner decision — an admin cannot
+approve out of order by mistake; they must resolve the stronger claim first.
+
 ---
 
 ## 14. Three read endpoints replaced by server-component reads

@@ -17,11 +17,61 @@
  */
 
 import type { BookingStatus } from "../db/schema.ts";
+import type { DateOnly } from "./dates.ts";
 
 /** One admin's currently-standing vote on a booking. */
 export interface StandingVote {
   adminId: string;
   vote: "approve" | "decline";
+}
+
+/**
+ * Another `reserved` booking on the same item, competing for overlapping
+ * dates — MAINTENANCE.md §13 allows several of these to coexist, since only
+ * `booked` blocks new reservations. This is the queue that decides which one
+ * gets approved first when there is more than one.
+ */
+export interface CompetingBooking {
+  id: string;
+  guestName: string;
+  createdAt: Date;
+  advancePaidDate: DateOnly | null;
+}
+
+/**
+ * Priority key for the approval queue: a guest who has actually paid the
+ * advance outranks one who merely asked first but hasn't paid — the payment
+ * is what secures the date in practice, submission order is only a
+ * tiebreaker between equally-unpaid requests. Owner decision, 2026-08-27.
+ */
+function priorityKey(b: { createdAt: Date; advancePaidDate: DateOnly | null }): readonly [0 | 1, string] {
+  return b.advancePaidDate !== null ? [0, b.advancePaidDate] : [1, b.createdAt.toISOString()];
+}
+
+/** True if `candidate` has a stronger claim than `other` on the same dates. */
+function outranks(
+  candidate: { createdAt: Date; advancePaidDate: DateOnly | null },
+  other: { createdAt: Date; advancePaidDate: DateOnly | null },
+): boolean {
+  const [tierA, keyA] = priorityKey(candidate);
+  const [tierB, keyB] = priorityKey(other);
+  return tierA !== tierB ? tierA < tierB : keyA < keyB;
+}
+
+/**
+ * Among bookings still competing with `target` for the same item and
+ * overlapping dates, find the one that should be decided first — or `null`
+ * if `target` already has the strongest claim (or there is no competitor).
+ * Only ever consulted before an `approve` vote: declining never needs this,
+ * since it only frees a date rather than locking one.
+ */
+export function findApprovalQueueBlocker(
+  target: { createdAt: Date; advancePaidDate: DateOnly | null },
+  competitors: readonly CompetingBooking[],
+): CompetingBooking | null {
+  if (competitors.length === 0) return null;
+  const strongest = competitors.reduce((best, c) => (outranks(c, best) ? c : best));
+  return outranks(strongest, target) ? strongest : null;
 }
 
 /**
@@ -40,6 +90,11 @@ export type VoteOutcome =
       currentStatus: BookingStatus;
     }
   | {
+      action: "rejected";
+      reason: "earlier_claim_pending";
+      blocker: CompetingBooking;
+    }
+  | {
       action: "applied";
       previousVote: "approve" | "decline" | null;
       nextStatus: BookingStatus;
@@ -54,6 +109,13 @@ export type VoteOutcome =
  * `booked` or `declined`, further voting is a bug in the caller (a stale
  * form submission, say), not a legitimate action.
  *
+ * An `approve` vote is also rejected outright if `queueBlocker` names a
+ * competing `reserved` booking with a stronger claim on the same dates
+ * (owner decision, 2026-08-27 — see `findApprovalQueueBlocker` above). This
+ * is a hard block, not a warning: the admin must decide the stronger claim
+ * first. `decline` is never blocked this way — it only frees a date, so
+ * there is nothing to jump ahead of.
+ *
  * Otherwise the vote is applied. The next status is computed by projecting
  * what the standing-votes list looks like AFTER this vote overwrites any
  * prior vote from the same admin:
@@ -66,9 +128,14 @@ export function decideVoteOutcome(
   currentStatus: BookingStatus,
   standingVotes: readonly StandingVote[],
   newVote: { adminId: string; vote: "approve" | "decline" },
+  queueBlocker: CompetingBooking | null = null,
 ): VoteOutcome {
   if (currentStatus !== "reserved") {
     return { action: "rejected", reason: "booking_already_resolved", currentStatus };
+  }
+
+  if (newVote.vote === "approve" && queueBlocker !== null) {
+    return { action: "rejected", reason: "earlier_claim_pending", blocker: queueBlocker };
   }
 
   const previousVote = standingVotes.find((v) => v.adminId === newVote.adminId)?.vote ?? null;

@@ -13,6 +13,7 @@
  * admin approves, since re-voting overwrites your own prior vote.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -38,12 +39,14 @@ export function VotePanel({
   const router = useRouter();
   const [busy, setBusy] = useState<"approve" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [blockedBy, setBlockedBy] = useState<{ bookingId: string; guestName: string } | null>(null);
   const [confirmingDecline, setConfirmingDecline] = useState(false);
 
   const resolved = status !== "reserved";
 
   async function castVote(vote: "approve" | "decline") {
     setError(null);
+    setBlockedBy(null);
     setBusy(vote);
     try {
       const response = await fetch(`/api/bookings/${bookingId}/vote`, {
@@ -53,10 +56,12 @@ export function VotePanel({
       });
       const data = (await response.json().catch(() => null)) as {
         error?: string;
+        blocked_by?: { bookingId: string; guestName: string };
       } | null;
 
       if (!response.ok) {
         setError(data?.error ?? "Could not record your vote. Please try again.");
+        setBlockedBy(data?.blocked_by ?? null);
         setBusy(null);
         return;
       }
@@ -69,6 +74,7 @@ export function VotePanel({
       router.refresh();
     } catch {
       setError("Could not reach the server. Check your connection and try again.");
+      setBlockedBy(null);
       setBusy(null);
     }
   }
@@ -94,7 +100,22 @@ export function VotePanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {error !== null && <Alert tone="error">{error}</Alert>}
+      {error !== null && (
+        <Alert tone="error">
+          {error}
+          {blockedBy !== null && (
+            <>
+              {" "}
+              <Link
+                href={`/admin/bookings/${blockedBy.bookingId}`}
+                className="font-medium underline underline-offset-2"
+              >
+                View {blockedBy.guestName}&apos;s booking &rarr;
+              </Link>
+            </>
+          )}
+        </Alert>
+      )}
 
       <p className={cx("text-sm leading-relaxed", TEXT_BODY)}>
         {approveCount === 0

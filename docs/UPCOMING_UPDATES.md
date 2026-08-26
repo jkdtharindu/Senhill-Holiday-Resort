@@ -38,6 +38,27 @@
     scheme — no separate work needed there; this admin panel now matches it exactly.
   - Status: ✅ Live on main branch
 
+- [x] **Approval queue block — prevent approving out of turn** (2026-08-27)
+  - Completed: `POST /bookings/:id/vote` now hard-blocks (409) an `approve` vote when another
+    `reserved` booking on the same item, with overlapping dates, has a stronger claim — an admin
+    can no longer accidentally confirm a later reservation while an earlier/paid one for the
+    same dates is still sitting undecided.
+  - Priority rule (owner decision): a booking with an advance payment recorded always outranks
+    one without, regardless of submission order; between two unpaid or two paid bookings,
+    earlier wins. `decline` is never blocked — it only frees a date.
+  - Response names the stronger booking (`blocked_by: { bookingId, guestName }`); the admin
+    booking-detail page now shows a direct link to it inside the error alert.
+  - Files affected: `src/lib/vote.ts` (new `findApprovalQueueBlocker`, extended
+    `decideVoteOutcome`, 11 new unit tests), `src/lib/vote-service.ts` (fetches competing
+    `reserved` bookings on the same item/overlap, only for an approve vote),
+    `src/app/api/bookings/[id]/vote/route.ts` (surfaces `blocked_by`),
+    `src/app/admin/(panel)/bookings/[id]/vote-panel.tsx` (renders the link)
+  - Verified: production build succeeds, all 194 unit tests pass (24 in vote.test.ts alone,
+    covering every priority-tier combination and that decline is never blocked).
+  - See `docs/MAINTENANCE.md` §13 and `docs/API_DOCUMENTATION.md`'s `/vote` section for the
+    full design rationale.
+  - Status: ✅ Live on main branch
+
 ### 🔴 Immediate (Current Sprint) — New Build Order
 
 - [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)
