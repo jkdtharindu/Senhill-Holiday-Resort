@@ -183,17 +183,20 @@ bookings 1---* booking_audit_log
 ## Derived values (not stored — computed at query time)
 
 **RoomStatus** (per room, on a `room_mode` day): `booked` if that room has a `bookings` row with
-`status IN ('reserved','booked')` overlapping the date, else `open`.
+`status IN ('reserved','booked')` overlapping the date, else `open`. (Display only — see
+CalendarState below for the reservation-blocking rule.)
 
 **CalendarState** (per date, aggregate — see `PRD.md` §9 for full rule table, now 4 values).
 Implemented in `src/lib/calendar.ts`, unit-tested and verified against the live database:
 - No `day_modes` row for that date: `unavailable`.
-- `room_mode` day: `open` if no *currently active* room is taken; `reserved` if some but not all
-  are; `booked` if every active room is taken. Zero active rooms reads as `open`, not `booked` —
-  nothing is taken out of nothing that could be taken.
-- `villa_mode` day: mirrors the villa's own booking `status` — `booked` beats `reserved` if both
-  somehow overlap the same date, so the derivation never crashes on that state even though
-  Slice 8's booking-creation validation should prevent it occurring.
+- `room_mode` day: `open` if no bookings exist; `reserved` if any room has a booking with status
+  `reserved` or `booked` (but not all are booked); `booked` if all active rooms have bookings with
+  status `booked`. **Key:** multiple customers CAN make reservations for the same room/dates
+  simultaneously (all show as `reserved`); only `booked` (admin-confirmed) bookings prevent new
+  reservations. Zero active rooms reads as `open`, not `booked`.
+- `villa_mode` day: follows the villa's own booking `status` — shows `reserved` if villa has a
+  `reserved` booking, `booked` if villa has a `booked` booking. If both somehow overlap the same
+  date, `booked` takes precedence for display (though booking-creation validation prevents this).
 - A `bookings` row against a Room or the Villa that has since been **deactivated** does not count
   toward either branch — CalendarState reflects what is bookable *now*, not a historical snapshot
   including inventory nobody can book any more.

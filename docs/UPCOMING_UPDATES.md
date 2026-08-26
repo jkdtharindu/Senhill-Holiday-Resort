@@ -1,6 +1,55 @@
 # Upcoming Updates & Future Requirements
 
-Status: **In Planning** | Last Updated: 2026-08-26
+**Last Updated:** 2026-08-26 | **Owner:** Tharindu | **Status:** In Planning
+
+---
+
+## 0. Priority Roadmap
+
+### 🔴 Immediate (Current Sprint)
+
+- [ ] **Email notifications** (SendGrid/Resend)
+  - Why: Guests don't know booking received; admins have no alerts
+  - Complexity: Medium
+  - Impact: Critical operational visibility
+  - Files: New `src/services/email.ts`, env config, API routes
+
+- [ ] **Restrict crops/uploads to known product origins**
+  - Why: Security — prevent malicious file types
+  - Complexity: Low
+  - Impact: Prevents file-based attacks
+  - Files: `src/lib/validation.ts`, upload route
+
+### 🟡 Short-term (Next 2 Weeks)
+
+- [ ] **BTree-GIST PostgreSQL exclusion constraints**
+  - Why: Database-level enforcement of non-overlapping dates for `booked` bookings
+  - Complexity: High
+  - Impact: Eliminates race condition window entirely
+  - Depends-on: Current code already handles `reserved` vs `booked` distinction
+  - Files: `migrations/`, `src/db/schema.ts`
+
+- [ ] **Admin login cleanup automation** (cron job)
+  - Why: `admin_login_attempts` table grows forever (see MAINTENANCE.md §4)
+  - Complexity: Medium
+  - Impact: Database maintenance, keeps logs clean
+  - Files: `src/api/cron/cleanup-login-attempts.ts` (or scheduled task)
+
+- [ ] **Image malware scanning**
+  - Why: Prevent malicious images in room/villa uploads
+  - Complexity: Medium
+  - Impact: Security hardening for file uploads
+  - Options: ClamAV, VirusTotal API, or third-party scanning service
+
+### 🟢 Nice-to-Haves (Post-MVP)
+
+- [ ] Dark mode end-to-end testing
+- [ ] CSV export for bookings
+- [ ] Bulk email to guests (e.g., "resort closed Dec 25-26")
+- [ ] Keyboard shortcuts in admin panel
+- [ ] Customer feedback channel (form/email/Slack)
+
+---
 
 ---
 

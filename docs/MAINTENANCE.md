@@ -249,34 +249,36 @@ owner and the two admins.
 
 ---
 
-## 13. No exclusion constraint on overlapping booking date ranges
+## 13. Overlapping `reserved` bookings are allowed; only `booked` blocks new reservations
 
-**What it does.** `POST /bookings` (Slice 8) and `POST /bookings/:id/vote` (Slice 9) both check
-for conflicts by querying, then writing — not by a database constraint that would refuse an
-overlapping row outright. Slice 8 narrows the gap by re-validating a second time inside the
-write transaction, immediately before the `INSERT`, using the identical pure validation function
-as the first check. Slice 9 narrows its own equivalent gap with `SELECT ... FOR UPDATE` on the
-booking row, which does fully serialize concurrent votes on the *same* booking.
+**What it does.** Multiple customers CAN make reservations for the same room/dates simultaneously.
+All start as `reserved` (pending payment & admin approval). Only bookings with `status = 'booked'`
+(admin-confirmed) prevent new reservations. This allows the admin to choose which reservation(s)
+to approve when there are conflicts.
 
-**Why not a real constraint.** A Postgres exclusion constraint on overlapping `[check_in,
-check_out)` ranges per `bookable_item_id` needs the `btree_gist` extension and a `daterange`
-column (or an expression index), which the schema does not currently have. Adding one is a
-migration, not a code change — deferred to keep Slice 8/9 scoped to application logic, matching
-this project's general bias toward the minimum that solves the stated problem.
+**Conflict detection design.** `POST /bookings` (Slice 8) checks for conflicts by querying only
+`booked` bookings (not `reserved`). Slice 8 re-validates a second time inside the write
+transaction, immediately before the `INSERT`, using the identical check. Slice 9 narrows the
+approval gap with `SELECT ... FOR UPDATE` on the booking row, which fully serializes concurrent
+votes on the *same* booking.
+
+**Database constraint gap.** No exclusion constraint exists on overlapping date ranges. A
+Postgres exclusion constraint on overlapping `[check_in, check_out)` ranges per `bookable_item_id`
+needs the `btree_gist` extension and a `daterange` column, which the schema does not have. Adding
+one is a migration; deferred to keep Slice 8/9 scoped to application logic.
 
 **The trade-off.** Two customers requesting the same room for overlapping nights, milliseconds
-apart, could both pass validation before either's `INSERT` commits — the re-validation-in-
-transaction mitigation narrows this window to roughly one round-trip, not zero. At this
-property's expected booking volume (one hotel/villa, admin-approved, no instant-book), the
-odds of two guests hitting the exact same night within that window are very low, and even if it
-happened, the two-admin approval step (Slice 9) is a second chance to catch it by eye before
-either booking is treated as confirmed.
+apart, could both pass the `booked` check before either's `INSERT` commits — but this is the
+*intended* behavior (allowing multiple `reserved` bookings). If both get committed, the admin
+will see them both and approve one while declining or ignoring the other. A real database
+constraint would only be needed if `reserved` bookings should also block — they shouldn't per
+current design.
 
-**Revisit when:** booking volume rises enough that this stops being a theoretical risk, or before
-opening booking to a much larger guest base. Add `btree_gist` + a `daterange` exclusion
-constraint on `bookings (bookable_item_id, daterange(check_in, check_out, '[)'))` filtered to
-`status IN ('reserved', 'booked')`, and let the database reject the second insert outright rather
-than relying on the transaction window.
+**Revisit when:** the business rule changes to prevent multiple reservations on the same dates,
+or booking volume rises enough that a truly atomic constraint is needed. Then add `btree_gist` +
+an exclusion constraint on `bookings (bookable_item_id, daterange(check_in, check_out, '[)'))`.
+Note: filtered to `status = 'booked'` ONLY, not `'reserved'`, so the constraint only applies to
+confirmed bookings.
 
 ---
 
@@ -307,3 +309,70 @@ rather than being reimplemented alongside them.
 - [x] Real Google sign-in completed 2026-08-23. The `customers` row was created correctly —
       name and email from Google, `phone` null, identity keyed on Google `sub`. A guest session
       returns 401 on every admin API route and is redirected away from the admin page.
+
+---
+
+## 16. Security & Operations Checklist
+
+**Critical (Must Have Before Production)**
+
+- [ ] **Database backups**
+  - [ ] Daily automated backups configured (Neon: check dashboard)
+  - [ ] Tested restore process (practice a restore on staging)
+  - [ ] Backup location secure (not public S3)
+  - **Revisit when:** First time a data loss or corruption issue occurs
+
+- [ ] **Admin password security**
+  - [x] Initial super_admin password changed on first login (verified by owner)
+  - [ ] All admin passwords are strong (12+ chars, mixed case, numbers, symbols)
+  - [ ] Passwords never stored in code or `.env` files (using bcrypt hashes only)
+
+- [ ] **HTTPS everywhere**
+  - [x] Vercel HTTPS enabled by default (automatic)
+  - [ ] All HTTP requests redirect to HTTPS
+  - [ ] HSTS headers set in response headers
+
+- [ ] **Rate limiting**
+  - [x] Login endpoint: 8 failures/email + 20 failures/IP per 15min (see `rate-limit.ts`)
+  - [ ] Booking endpoint: Add rate limiting (prevent scraping or abuse)
+  - [ ] Cancellation endpoint: Add rate limiting
+  - **Revisit when:** Booking volume rises or abuse is detected
+
+- [ ] **Refresh token rotation** (currently NOT implemented)
+  - [ ] Sessions expire after fixed time (currently 8 hours for admins)
+  - [ ] Tokens cannot be used after password change (not yet enforced)
+  - [ ] No old tokens remain valid after logout
+  - **Revisit when:** Adding multi-device session management
+
+- [ ] **CORS headers**
+  - [ ] Restricted to known origins (NOT implemented — currently wide open)
+  - [ ] Credentials handled securely
+  - **Revisit when:** Mobile app or third-party integrations added
+
+- [ ] **Image malware scanning** (currently NOT implemented)
+  - [ ] File upload validation (type/size check done; no re-encoding)
+  - [ ] Virus scanning service for uploaded images
+  - **Revisit when:** Opening file uploads to guests
+
+**High Priority**
+
+- [ ] **Admin audit trail**
+  - [x] All booking changes logged with timestamp & admin name (audit_log table exists)
+  - [ ] Admins can view who did what when (display pending)
+  - [ ] Audit retention policy (keep forever or rotate after X years?)
+
+- [ ] **Monitoring & Alerts**
+  - [ ] Error tracking: Set up Sentry (free tier) to catch production bugs
+  - [ ] Database monitoring: Watch connection pool, slow queries
+  - [ ] Uptime monitoring: UptimeRobot (free) pings every 5 min
+  - [ ] Email delivery: Verify booking confirmations reach customers (SMTP logs)
+
+**Testing Before Launch**
+
+- [ ] Concurrent bookings: 2 users book same room → conflict handling works
+- [ ] Database transaction rollback: Failed booking leaves no partial data
+- [ ] Email delivery: Test booking confirmation email end-to-end
+- [ ] Mobile responsiveness: Test booking flow on iPhone/Android
+- [ ] Error pages: 404/500 are custom (not raw Next.js errors)
+
+---

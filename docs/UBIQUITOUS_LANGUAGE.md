@@ -33,7 +33,7 @@ synonyms mid-build.
 
 | Term | Definition |
 |---|---|
-| **BookingStatus** | The Booking's own status: `reserved` → `booked` \| `declined`. A `reserved` Booking is what causes a date to show `reserved` CalendarState; a `booked` Booking causes `booked` CalendarState (combined with other rooms' status per the room-mode rule in PRD §9). |
+| **BookingStatus** | The Booking's own status: `reserved` → `booked` \| `declined`. A `reserved` Booking (pending payment/approval) does NOT prevent new customers from reserving the same room/dates — multiple customers can have simultaneous `reserved` bookings for the same dates, and the admin approves/declines them. Only `booked` (admin-confirmed) bookings prevent new reservations. A `reserved` Booking causes a date to show `reserved` CalendarState; a `booked` Booking (when all rooms are booked) causes `booked` CalendarState. |
 | **ApprovalVote** | One Admin's decision (`approve` \| `decline`) on a specific Booking. Two distinct Admins' `approve` votes move a Booking to `booked`. One `decline` vote moves it to `declined` immediately — no tiebreaker exists. |
 | **Required approvals** | Always 2, fixed — not configurable per booking in this version. |
 | **BookingWindow** | The rolling 90-day range from today within which customers can view/book dates. Recalculates daily; not a fixed date range. Admin views/configuration (DayMode) are not restricted to this window — admins can plan further ahead. |

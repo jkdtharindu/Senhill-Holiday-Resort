@@ -70,7 +70,7 @@ async function loadDayModesForNights(
   return new Map(rows.map((r) => [r.date, r.mode]));
 }
 
-/** Any active booking on this item overlapping [checkIn, checkOut) — same overlap shape as calendar-service.ts. */
+/** Only booked (admin-confirmed) bookings block new reservations. Reserved (pending) bookings do not. */
 async function loadExistingBookingsForItem(
   client: Queryable,
   itemId: string,
@@ -83,7 +83,7 @@ async function loadExistingBookingsForItem(
     .where(
       and(
         eq(bookings.bookableItemId, itemId),
-        inArray(bookings.status, ["reserved", "booked"]),
+        inArray(bookings.status, ["booked"]),
         lte(bookings.checkIn, checkOut),
         gt(bookings.checkOut, checkIn),
       ),

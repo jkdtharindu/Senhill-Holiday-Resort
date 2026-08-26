@@ -131,9 +131,9 @@ one type is ever offered.
 | State | Meaning |
 |---|---|
 | `unavailable` | No DayMode set for this date yet — not bookable, admin hasn't opened it |
-| `open` | DayMode is set; nothing booked yet (room-mode: no rooms taken; villa-mode: villa free) |
-| `reserved` | DayMode is set; room-mode: at least one room booked/reserved but at least one still open; villa-mode: villa booking exists in `reserved` status |
-| `booked` | DayMode is set; room-mode: every room taken; villa-mode: villa booking is in `booked` status |
+| `open` | DayMode is set; nothing booked yet (room-mode: no bookings at all; villa-mode: villa free) |
+| `reserved` | DayMode is set; at least one room/villa has a booking in `reserved` status (pending admin approval) or lower-priority `booked` bookings. Multiple customers MAY have made reservations for the same room/dates; admin picks which to approve. |
+| `booked` | DayMode is set; room-mode: every active room has a `booked` (admin-confirmed) booking; villa-mode: villa's booking is in `booked` status. Only `booked` bookings prevent new reservations. |
 
 This is intentionally coarse — a color per day, nothing more, to keep the top-level calendar
 simple. Room-by-room and guest-level detail is only available in the **day-detail view**,
