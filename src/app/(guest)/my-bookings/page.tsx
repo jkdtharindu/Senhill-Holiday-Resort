@@ -15,7 +15,6 @@ import { redirect } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 
 import { auth } from "@/auth";
-import { Alert } from "@/components/ui/alert";
 import { BookingStatusBadge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { EmptyState, PageHeader, PageShell } from "@/components/ui/card";
@@ -29,6 +28,8 @@ import {
   type DateOnly,
 } from "@/lib/dates";
 import { WithdrawButton } from "./withdraw-button";
+
+import { CreatedBanner } from "./created-banner";
 
 export const metadata: Metadata = {
   title: "My bookings",
@@ -88,12 +89,7 @@ export default async function MyBookingsPage({
         actions={<LinkButton href="/calendar">Book another stay</LinkButton>}
       />
 
-      {justCreated && (
-        <Alert tone="success" title="Request sent">
-          Our team will review it shortly. It stays as &ldquo;awaiting
-          confirmation&rdquo; until two of our admins have approved it.
-        </Alert>
-      )}
+      {justCreated && <CreatedBanner />}
 
       {rows.length === 0 ? (
         <EmptyState

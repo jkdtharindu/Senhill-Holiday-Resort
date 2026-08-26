@@ -144,17 +144,17 @@ export default async function DayDetailPage({
             {isVillaMode ? "The villa" : "Rooms"}
           </h2>
 
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-4">
             {detail.items.map((item) => (
               <li
                 key={item.itemId}
                 className={cx(
-                  "flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3",
+                  "rounded-md border p-4",
                   BORDER,
                   SURFACE,
                 )}
               >
-                <div className="flex flex-col gap-0.5">
+                <div className="mb-3 flex flex-col gap-2">
                   <Link
                     href={`/rooms/${item.itemId}`}
                     className={cx(
@@ -169,7 +169,20 @@ export default async function DayDetailPage({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {item.images.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {item.images.map((img) => (
+                      <img
+                        key={img.id}
+                        src={img.url}
+                        alt={item.name}
+                        className="h-16 w-24 rounded object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <RoomStatusBadge status={item.status} />
                   {item.status === "open" && (
                     <LinkButton

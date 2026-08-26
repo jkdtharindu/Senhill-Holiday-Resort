@@ -11,10 +11,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { auth, signIn } from "@/auth";
-import { Alert } from "@/components/ui/alert";
 import { CardPanel, PageShell } from "@/components/ui/card";
 import { cx, EYEBROW, TEXT_BODY, TEXT_HEADING, TEXT_MUTED } from "@/components/ui/styles";
 import { safeNext } from "@/lib/safe-next";
+
+import { ErrorBanner } from "./error-banner";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -58,7 +59,7 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
         </p>
       </header>
 
-      {errorMessage !== null && <Alert tone="error">{errorMessage}</Alert>}
+      {errorMessage !== null && <ErrorBanner message={errorMessage} />}
 
       <CardPanel>
         {/*

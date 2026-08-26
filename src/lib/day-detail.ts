@@ -19,6 +19,7 @@ export interface DayDetailItemRow {
   id: string;
   name: string;
   capacity: number;
+  images: { id: string; url: string }[];
 }
 
 /**
@@ -39,6 +40,7 @@ export interface ItemStatus {
   itemId: string;
   name: string;
   capacity: number;
+  images: { id: string; url: string }[];
   status: RoomStatus;
   /** The overlapping booking's id, if any — admin service uses this to attach full detail. */
   bookingId: string | null;
@@ -75,6 +77,7 @@ export function deriveItemStatuses(
       itemId: item.id,
       name: item.name,
       capacity: item.capacity,
+      images: item.images,
       status: overlapping ? "booked" : "open",
       bookingId: overlapping?.id ?? null,
     };

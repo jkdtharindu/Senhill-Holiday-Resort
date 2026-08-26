@@ -6,6 +6,15 @@
 
 ## 0. Priority Roadmap
 
+### ✅ Recently Completed
+
+- [x] **Customer day-detail with room thumbnail images** (2026-08-26)
+  - Completed: Customers now see all room images in day-detail view (vertical list layout)
+  - Displays: Room name, capacity, all thumbnail images (multiple per room), and booking status
+  - Files affected: `src/lib/day-detail.ts`, `src/lib/day-detail-service.ts`, `src/app/(guest)/calendar/[date]/page.tsx`
+  - Images load in display order, responsive thumbnail size (h-16 w-24)
+  - Status: ✅ Live on main branch
+
 ### 🔴 Immediate (Current Sprint) — New Build Order
 
 - [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)

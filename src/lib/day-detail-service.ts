@@ -13,12 +13,13 @@
  * through by accident.
  */
 
-import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   adminUsers,
   approvalVotes,
+  bookableItemImages,
   bookableItems,
   bookings,
   dayModes,
@@ -91,23 +92,40 @@ async function loadItemsAndBookings(
   }
 
   const itemIds = itemRows.map((r) => r.id);
-  const rawBookingRows = await db
-    .select({
-      id: bookings.id,
-      bookableItemId: bookings.bookableItemId,
-      status: bookings.status,
-      checkIn: bookings.checkIn,
-      checkOut: bookings.checkOut,
-    })
-    .from(bookings)
-    .where(
-      and(
-        inArray(bookings.bookableItemId, itemIds),
-        inArray(bookings.status, ["reserved", "booked"]),
-        lte(bookings.checkIn, date),
-        gt(bookings.checkOut, date),
+
+  const [rawBookingRows, imageRows] = await Promise.all([
+    db
+      .select({
+        id: bookings.id,
+        bookableItemId: bookings.bookableItemId,
+        status: bookings.status,
+        checkIn: bookings.checkIn,
+        checkOut: bookings.checkOut,
+      })
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.bookableItemId, itemIds),
+          inArray(bookings.status, ["reserved", "booked"]),
+          lte(bookings.checkIn, date),
+          gt(bookings.checkOut, date),
+        ),
       ),
-    );
+    db
+      .select({ itemId: bookableItemImages.bookableItemId, id: bookableItemImages.id, url: bookableItemImages.imageUrl })
+      .from(bookableItemImages)
+      .where(inArray(bookableItemImages.bookableItemId, itemIds))
+      .orderBy(asc(bookableItemImages.displayOrder)),
+  ]);
+
+  // Group images by item
+  const imagesByItem = new Map<string, { id: string; url: string }[]>();
+  for (const img of imageRows) {
+    if (!imagesByItem.has(img.itemId)) {
+      imagesByItem.set(img.itemId, []);
+    }
+    imagesByItem.get(img.itemId)!.push({ id: img.id, url: img.url });
+  }
 
   // The WHERE clause guarantees status is only "reserved" | "booked", but
   // Drizzle's inferred type is the full 3-value enum regardless — narrow
@@ -117,7 +135,13 @@ async function loadItemsAndBookings(
     status: row.status as "reserved" | "booked",
   }));
 
-  return { items: itemRows, bookings: bookingRows };
+  // Attach images to items
+  const itemsWithImages: DayDetailItemRow[] = itemRows.map((row) => ({
+    ...row,
+    images: imagesByItem.get(row.id) ?? [],
+  }));
+
+  return { items: itemsWithImages, bookings: bookingRows };
 }
 
 /** Every ApprovalVote cast on any of these bookings, with the voting admin's current name. */
