@@ -11,12 +11,12 @@ import { describe, it } from "node:test";
 import { deriveItemStatuses, type DayDetailBookingRow, type DayDetailItemRow } from "./day-detail.ts";
 
 const ROOMS: DayDetailItemRow[] = [
-  { id: "r1", name: "Room 1", capacity: 2 },
-  { id: "r2", name: "Room 2", capacity: 2 },
-  { id: "r3", name: "Room 3", capacity: 4 },
+  { id: "r1", name: "Room 1", capacity: 2, images: [] },
+  { id: "r2", name: "Room 2", capacity: 2, images: [] },
+  { id: "r3", name: "Room 3", capacity: 4, images: [] },
 ];
 
-const VILLA: DayDetailItemRow[] = [{ id: "v1", name: "The Villa", capacity: 15 }];
+const VILLA: DayDetailItemRow[] = [{ id: "v1", name: "The Villa", capacity: 15, images: [] }];
 
 function booking(
   id: string,

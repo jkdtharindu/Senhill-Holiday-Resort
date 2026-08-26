@@ -148,6 +148,13 @@ booking the same way; the booking's checkout day read `open` again once its own 
 confirming the half-open boundary; an unauthenticated request 401'd; a date outside the 90-day
 window 400'd for the customer. All test data removed afterward.
 
+**Second consumer added 2026-08-27, no endpoint change needed.** The admin calendar's
+"Availability at a glance" panel (`/admin/calendar`) fetches this same endpoint client-side when
+an admin clicks a date, and renders the returned `items` (including `images`, added alongside the
+customer day-detail thumbnail feature the same day) inline below the calendar grid. This endpoint
+already served admin-shaped output whenever an admin session was present — the panel exists solely
+because nothing had called it from the admin UI before. See `src/app/admin/(panel)/calendar/availability-calendar.tsx`.
+
 ### `PUT /calendar/day-mode` — admin — as built, done
 Set DayMode for one or more explicit dates ahead of time. Any admin, not just super admin, per
 FR11. Refuses more than 500 dates in one request (`MAX_EXPLICIT_DATES` in

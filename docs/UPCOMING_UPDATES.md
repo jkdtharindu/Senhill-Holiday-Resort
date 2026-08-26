@@ -15,6 +15,29 @@
   - Images load in display order, responsive thumbnail size (h-16 w-24)
   - Status: ✅ Live on main branch
 
+- [x] **Admin calendar with color-coded availability at a glance** (2026-08-27)
+  - Completed: New "Availability at a glance" panel on `/admin/calendar`, above the existing
+    DayMode-configuration grid — same 4-colour CalendarState scheme the guest `/calendar` page
+    already used (green=open, amber=partly taken, red=fully booked, grey=not yet opened), so an
+    admin scanning for "what needs attention" learns one palette, not two.
+  - Click-to-expand inline: clicking a date fetches `GET /api/calendar/:date` (the endpoint
+    already returned admin-detail — guest name, phone, payment stage — when an admin session is
+    present; no new endpoint needed) and renders the per-room breakdown, including thumbnails
+    from the day-detail image feature above, directly below the grid. Clicking the same date
+    again collapses it. No navigation away from the calendar page.
+  - Files affected: new `src/app/admin/(panel)/calendar/availability-calendar.tsx` (client
+    component owning the click/fetch/expand state), `src/app/admin/(panel)/calendar/page.tsx`
+    (fetches `fetchCalendarDays` alongside the existing DayMode query, builds a second month
+    grid keyed on CalendarState)
+  - Verified: production build succeeds, all 183 existing unit tests still pass, manually
+    exercised in the browser — grid renders correct colours from live data, click expands the
+    right date's rooms with images loaded, re-click collapses, network tab confirms the admin
+    (not customer) response shape is returned.
+  - Customer-facing color-coded calendar was **already built** (Slice 6/12) at
+    `src/app/(guest)/calendar/page.tsx` using the identical `CalendarState`/`STATE_CLASSES`
+    scheme — no separate work needed there; this admin panel now matches it exactly.
+  - Status: ✅ Live on main branch
+
 ### 🔴 Immediate (Current Sprint) — New Build Order
 
 - [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)
