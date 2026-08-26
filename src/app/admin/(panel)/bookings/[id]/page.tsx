@@ -25,6 +25,7 @@ import { fetchAdminBooking } from "@/lib/admin-bookings-service";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { formatDateForDisplay, nightsOfStay } from "@/lib/dates";
 import { BookingEditForm } from "./booking-edit-form";
+import { CancelPanel } from "./cancel-panel";
 import { VotePanel } from "./vote-panel";
 
 export const metadata: Metadata = {
@@ -43,6 +44,7 @@ const FIELD_LABEL: Record<string, string> = {
   advance_amount: "Advance amount",
   advance_paid_date: "Advance paid on",
   internal_notes: "Internal notes",
+  cancellation_reason: "Cancellation reason",
 };
 
 function fieldLabel(field: string): string {
@@ -122,6 +124,37 @@ export default async function AdminBookingDetailPage({
               </li>
             ))}
           </ul>
+        )}
+      </CardPanel>
+
+      <CardPanel
+        title="Cancellation"
+        description="Cancelling releases the dates at once. No approval vote is needed — a held date being released is the safe direction."
+      >
+        <CancelPanel
+          bookingId={booking.id}
+          status={booking.status}
+          paymentStage={booking.paymentStage}
+        />
+
+        {booking.cancelledAt !== null && (
+          <div className="mt-5 border-t pt-4 dark:border-stone-800">
+            <DescriptionList
+              items={[
+                { label: "Cancelled on", value: formatMoment(booking.cancelledAt) },
+                {
+                  label: "Cancelled by",
+                  // No admin row means the guest withdrew it themselves —
+                  // the null is the record, not missing data (schema.ts).
+                  value: booking.cancelledByName ?? "The guest (self-service)",
+                },
+                {
+                  label: "Reason",
+                  value: booking.cancellationReason ?? "—",
+                },
+              ]}
+            />
+          </div>
         )}
       </CardPanel>
 

@@ -109,6 +109,22 @@ export async function fetchAdminBookings(
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(bookings.checkIn));
 
+  return attachApproveCounts(rows);
+}
+
+/**
+ * The approve count is resolved in a second query and joined in memory rather
+ * than as a correlated subquery — shared by every list read in this module
+ * for the same reason `fetchAdminBookings` does it: small dataset, readable
+ * SQL, one place this join lives.
+ */
+async function attachApproveCounts<
+  Row extends { id: string; checkIn: unknown; checkOut: unknown },
+>(rows: Row[]): Promise<Array<Omit<Row, "checkIn" | "checkOut"> & {
+  checkIn: DateOnly;
+  checkOut: DateOnly;
+  approveCount: number;
+}>> {
   if (rows.length === 0) return [];
 
   const voteRows = await db
@@ -133,6 +149,46 @@ export async function fetchAdminBookings(
     checkOut: row.checkOut as DateOnly,
     approveCount: approvesByBooking.get(row.id) ?? 0,
   }));
+}
+
+/**
+ * The outreach worklist: bookings not yet arrived, soonest check-in first.
+ *
+ * `reserved` and `booked` both belong here — a reserved request still needs a
+ * decision as much as a booked one needs a call before arrival, and that is
+ * exactly the two "live" statuses the rest of the app already treats as
+ * occupying a date (see the same `inArray(status, ["reserved","booked"])`
+ * pattern in booking-service.ts, calendar-service.ts and day-mode-service.ts).
+ * `declined` and `cancelled` are resolved; there is nothing left to act on.
+ *
+ * Ordered ascending by check-in — the opposite of `fetchAdminBookings`, which
+ * shows newest-first for browsing. This list is a worklist to work down in
+ * calendar order, not a log to scan from the most recent request.
+ */
+export async function fetchUpcomingBookings(
+  today: DateOnly,
+): Promise<AdminBookingListItem[]> {
+  const rows = await db
+    .select({
+      id: bookings.id,
+      guestName: bookings.guestName,
+      phone: bookings.phone,
+      email: bookings.email,
+      itemName: bookableItems.name,
+      itemKind: bookableItems.kind,
+      checkIn: bookings.checkIn,
+      checkOut: bookings.checkOut,
+      guestsCount: bookings.guestsCount,
+      status: bookings.status,
+      paymentStage: bookings.paymentStage,
+      createdAt: bookings.createdAt,
+    })
+    .from(bookings)
+    .innerJoin(bookableItems, eq(bookings.bookableItemId, bookableItems.id))
+    .where(and(inArray(bookings.status, ["reserved", "booked"]), gte(bookings.checkIn, today)))
+    .orderBy(asc(bookings.checkIn));
+
+  return attachApproveCounts(rows);
 }
 
 export interface AdminBookingVote {
@@ -168,6 +224,15 @@ export interface AdminBookingFull {
   advanceAmount: string | null;
   advancePaidDate: DateOnly | null;
   internalNotes: string;
+  /** Null unless `status` is `cancelled` — the schema's check constraint ties the two together. */
+  cancelledAt: Date | null;
+  /**
+   * The cancelling admin's current name, or null when the guest withdrew the
+   * booking themselves. Null here is meaningful, not missing data — render it
+   * as the guest having acted, never as unknown. See schema.ts.
+   */
+  cancelledByName: string | null;
+  cancellationReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   votes: AdminBookingVote[];
@@ -194,11 +259,21 @@ export async function fetchAdminBooking(id: string): Promise<AdminBookingFull | 
       advanceAmount: bookings.advanceAmount,
       advancePaidDate: bookings.advancePaidDate,
       internalNotes: bookings.internalNotes,
+      cancelledAt: bookings.cancelledAt,
+      // Joined live, same reasoning as the vote list below: this answers "who
+      // is that admin" for a reader looking at the record now. The audit log
+      // separately holds the denormalized name they had at the time.
+      cancelledByName: adminUsers.name,
+      cancellationReason: bookings.cancellationReason,
       createdAt: bookings.createdAt,
       updatedAt: bookings.updatedAt,
     })
     .from(bookings)
     .innerJoin(bookableItems, eq(bookings.bookableItemId, bookableItems.id))
+    // LEFT, not INNER: `cancelled_by` is null both for a booking that was
+    // never cancelled and for one the guest withdrew themselves. An inner
+    // join would silently drop every such booking from this lookup.
+    .leftJoin(adminUsers, eq(bookings.cancelledBy, adminUsers.id))
     .where(eq(bookings.id, id))
     .limit(1);
 

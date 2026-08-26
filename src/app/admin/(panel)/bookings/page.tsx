@@ -31,7 +31,22 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const STATUSES: BookingStatus[] = ["reserved", "booked", "declined"];
+/**
+ * Every status an admin can filter by, with its label.
+ *
+ * Typed as a total Record over BookingStatus rather than a hand-kept array,
+ * so adding a value to the enum is a compile error here until it is given a
+ * label. The previous array form type-checked happily while silently leaving
+ * the new status unfilterable — a gap nothing would have caught.
+ */
+const STATUS_FILTER_LABEL: Record<BookingStatus, string> = {
+  reserved: "Reserved (awaiting approval)",
+  booked: "Confirmed",
+  declined: "Declined",
+  cancelled: "Cancelled",
+};
+
+const STATUSES = Object.keys(STATUS_FILTER_LABEL) as BookingStatus[];
 
 function asStatus(raw: unknown): BookingStatus | undefined {
   return typeof raw === "string" && (STATUSES as string[]).includes(raw)
@@ -52,7 +67,15 @@ export default async function AdminBookingsPage({
   const from = asDate(params.from);
   const to = asDate(params.to);
   const q = typeof params.q === "string" ? params.q : undefined;
-  const itemId = typeof params.item === "string" ? params.item : undefined;
+  // Guarded against "" as well as absence: the item <select>'s "Any" option
+  // has value="", so submitting the filter form with it selected sends
+  // `item=` on the URL. Without this check that empty string reached
+  // `eq(bookings.bookableItemId, "")`, and Postgres rejects "" as a uuid
+  // outright (`invalid input syntax for type uuid: ""`) — a 500 on the
+  // single most common way to submit this form. `asStatus`/`asDate` already
+  // avoid the same trap because their allow-lists never contain "".
+  const itemId =
+    typeof params.item === "string" && params.item !== "" ? params.item : undefined;
 
   const [rows, items] = await Promise.all([
     fetchAdminBookings({ status, from, to, q, itemId }),
@@ -95,7 +118,7 @@ export default async function AdminBookingsPage({
                 <option value="">Any status</option>
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {s === "reserved" ? "Reserved (awaiting approval)" : s === "booked" ? "Confirmed" : "Declined"}
+                    {STATUS_FILTER_LABEL[s]}
                   </option>
                 ))}
               </select>

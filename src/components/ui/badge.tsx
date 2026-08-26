@@ -91,6 +91,11 @@ export function BookingStatusBadge({
 }) {
   if (status === "booked") return <Badge tone="open">Confirmed</Badge>;
   if (status === "declined") return <Badge tone="closed">Declined</Badge>;
+  // Cancelled reads neutral, not red: a declined booking is a decision the
+  // resort made about a guest, whereas a cancellation is usually the guest's
+  // own or an agreed change. Colouring them alike would misreport what
+  // happened at a glance.
+  if (status === "cancelled") return <Badge tone="neutral">Cancelled</Badge>;
   return (
     <Badge tone="pending">
       {audience === "guest" ? "Awaiting confirmation" : "Reserved"}

@@ -74,12 +74,22 @@ export function VotePanel({
   }
 
   if (resolved) {
-    return (
-      <Alert tone={status === "booked" ? "success" : "error"}>
-        This booking is {status === "booked" ? "confirmed" : "declined"} —
-        voting is closed on it.
-      </Alert>
-    );
+    // Three distinct closed states, and they must not be conflated: a
+    // cancelled booking was called off after the fact, which is a different
+    // account of what happened than the approval process having declined it.
+    const closed: Record<
+      Exclude<BookingStatus, "reserved">,
+      { tone: "success" | "error" | "info"; text: string }
+    > = {
+      booked: { tone: "success", text: "This booking is confirmed — voting is closed on it." },
+      declined: { tone: "error", text: "This booking is declined — voting is closed on it." },
+      cancelled: {
+        tone: "info",
+        text: "This booking was cancelled — voting is closed on it. See the cancellation record below.",
+      },
+    };
+    const { tone, text } = closed[status];
+    return <Alert tone={tone}>{text}</Alert>;
   }
 
   return (

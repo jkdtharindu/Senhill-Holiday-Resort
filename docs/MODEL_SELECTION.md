@@ -31,6 +31,17 @@ No model checks needed — already shipped.
 - **Slice 12** used **Opus 5**, as planned. No exception. Largest slice (14 screens);
   outcome: zero defects in the new screens, plus four pre-existing issues found and fixed
   (font override, open redirect, `<a>` internal links, duplicated a11y labels).
+- **Slice 13** (booking cancellation) used **Opus 5**, as planned. No exception. Outcome:
+  20/20 live checks passed, plus two latent defects found and fixed — a status filter built
+  from a hand-kept array that type-checked while silently omitting the new enum value, and an
+  approval panel that would have reported a cancelled booking as "declined". A migration
+  ordering hazard was also caught before it reached the database (enum value referenced by a
+  check constraint in the same transaction; see `tasks.md`).
+- **Slice 14** (dashboard "Upcoming stays" table) used **Sonnet 5**, as planned. No exception.
+  A reported production filter error did not reproduce against the live database and was not
+  pursued further as a code fix; a separate question about payment-gating the approval status
+  was resolved by confirming the rule stays as built. Outcome: query verified live against the
+  real dataset, production build succeeds.
 
 See `docs/tasks.md` for the full verification log for each.
 

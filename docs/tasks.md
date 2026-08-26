@@ -74,6 +74,94 @@
       All Slice 12 verification data removed afterwards (booking, day modes, temporary admin);
       seeded placeholder notes restored.
       Trade-offs accepted for launch are logged in `MAINTENANCE.md`, not carried as open work.
+      Slice 13 done: booking cancellation (`POST /bookings/:id/cancel`). Built with Opus 5 per
+      MODEL_SELECTION.md, no exception. Rules settled with the owner 2026-08-26 and deliberately
+      asymmetric: an admin cancels any live booking (`reserved` or `booked`); a guest may only
+      withdraw their OWN booking and only while `reserved`, because a confirmed stay usually has
+      an advance payment arranged offline. Immediate, with no ApprovalVote — the two-admin rule
+      exists to stop a date being *held* carelessly, and releasing one is the safe direction.
+      No refund is calculated, by design: pricing is out of scope (PRD §4), so a percentage of
+      `advance_amount` would describe the deposit rather than the stay while reading as
+      authoritative; an admin arranges the refund offline and sets `paymentStage` to `refunded`
+      through the existing update route, and the admin UI warns whenever a payment is on record.
+      Schema: `booking_status` gains `cancelled`, `bookings` gains `cancelled_at`/`cancelled_by`/
+      `cancellation_reason`, with a check constraint tying status and timestamp together. The
+      constraint uses `status::text` — drizzle runs all pending migrations in ONE transaction
+      (`pg-core/dialect.js`), and Postgres refuses to evaluate an enum value added earlier in the
+      same transaction when validating against the populated table; the cast avoids referencing
+      it. **Date recovery needed no code at all** — every date-blocking query already names what
+      blocks by allowlist (`inArray(status, [...])`) rather than excluding `declined`, so a
+      cancelled booking drops out of all of them the moment its status changes.
+      Verified against the live database, driving the real service modules (20 checks, all
+      passed): another guest refused 404 with ownership checked before status so booking
+      existence cannot leak; the owner's withdrawal recorded `cancelled_by` NULL with the audit
+      trail attributing it to "Guest (self-service)"; a re-cancel refused 409; the freed dates
+      accepted a brand-new booking; two admins confirmed that booking and the guest was then
+      refused 403 on it while an admin cancelled it successfully with the reason recorded
+      verbatim; a declined booking refused 409. All 3 test bookings and 2 test customers removed
+      afterwards; the 6 pre-existing real bookings confirmed present and unchanged.
+      Also fixed along the way: the admin bookings list built its status filter from a hand-kept
+      array typed `BookingStatus[]`, which type-checks even when the enum grows — `cancelled`
+      would have been silently unfilterable. Replaced with a total `Record<BookingStatus, string>`
+      so any future status is a compile error until labelled. The approval panel would also have
+      told an admin that a cancelled booking was "declined"; it now distinguishes all three
+      closed states.
+      **Not verified in a browser:** both new UI surfaces (the guest withdraw button and the
+      admin cancel panel) sit behind authentication, and port 3000 — which this app's Google
+      OAuth callback is bound to — was held by another session at the time. Production build
+      succeeds and every page compiles; the logic is covered by the live pass above, but the
+      rendered screens have not been eyeballed.
+      Slice 14 done: admin dashboard "Upcoming stays" table (`src/app/admin/(panel)/page.tsx`).
+      Built with Sonnet 5 per MODEL_SELECTION.md, no exception. Requirements settled with the
+      owner 2026-08-27 after two things came up during Slice 13 follow-up: (1) a live filter on
+      `/admin/bookings` errored in production — investigated and could not reproduce by calling
+      the exact same query function directly against the live database with every filter
+      combination; most likely transient, coinciding with the Slice 13 migration and live
+      verification pass running against the same database moments earlier; (2) the owner asked
+      whether Confirmed status should also depend on advance payment — traced to the two
+      reserved bookings on the live database simply having zero votes cast on them yet, not a
+      payment-linkage issue. Owner confirmed keeping the two-admin-vote rule exactly as built,
+      no HITL change needed.
+      New `fetchUpcomingBookings()` in `admin-bookings-service.ts`: `reserved` and `booked`
+      bookings with `check_in >= today`, ascending (soonest first) — the opposite sort from the
+      browsable list, which shows newest-first. The approve-count join was extracted into a
+      shared `attachApproveCounts()` helper used by both list functions rather than duplicated.
+      The dashboard's existing "Upcoming stays" stat tile now derives its count from this same
+      fetched list (previously a separate `COUNT(*)` query that could never disagree with the
+      table, but also never had to) and its link now anchors down to the table on the same page
+      instead of off to the general bookings list.
+      Verified against the live database via `fetchUpcomingBookings` directly: all 5 real
+      upcoming bookings returned, strictly ascending by check-in, the one `declined` booking and
+      all past dates correctly excluded. Production build succeeds.
+      **2026-08-27 follow-up — browser-verified, and the real filter bug found and fixed.**
+      Once port 3000 was free (the other session's dev server had exited without killing its
+      child `node` process — an orphan, not a live server) and logged in as the seeded super
+      admin, submitting the bookings filter form with defaults reproduced the reported
+      production error exactly: `invalid input syntax for type uuid: ""`. Root cause, confirmed
+      from the dev server's stack trace: the item `<select>`'s "Any" option has `value=""`, so
+      submitting the form sends `item=` on the URL; `page.tsx` guarded against the param being
+      *absent* but not against it being *empty*, so `""` reached
+      `eq(bookings.bookableItemId, "")` and Postgres rejected it outright. Pre-existing since
+      Slice 12, unrelated to Slice 13/14 — my earlier attempt to reproduce it by calling
+      `fetchAdminBookings` directly missed this because every filter combination I tried passed
+      either `undefined` or a real value, never an explicit `""`. Fixed in
+      `src/app/admin/(panel)/bookings/page.tsx` by treating `""` the same as absent, matching
+      the guard `asStatus`/`asDate` already had via their allow-lists. Re-verified in the browser
+      afterward: the exact click that broke before (Apply filters with every dropdown left on
+      its default) now returns the full unfiltered list.
+      Also browser-verified in the same pass: the dashboard's Upcoming stays table (tile count
+      matches table row count, ascending order, email inline); the admin cancel-panel's
+      confirmation step (textarea, Confirm/Keep booking) opens correctly on a real `reserved`
+      booking, backed out via "Keep booking" without cancelling it; the guest withdraw button's
+      confirmation step opens correctly on a real booking, backed out via "Keep it". Both
+      real bookings touched during this check were confirmed unchanged in the database
+      afterward (`status: "reserved"`, `cancelledAt: null`).
+      One tooling note: the Browser pane's synthetic `left_click` did not register as a trusted
+      click on the "Cancel this booking" / withdraw buttons specifically (coordinates, DOM
+      target and event listeners all checked out fine) — worked around by dispatching `.click()`
+      via `javascript_tool` for those two buttons only. Everything else (navigation, the
+      bookings-filter form, admin sign-in) clicked normally through the standard tool. Noted here
+      in case it recurs on the same components.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

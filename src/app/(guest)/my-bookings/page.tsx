@@ -28,6 +28,7 @@ import {
   todayAtResort,
   type DateOnly,
 } from "@/lib/dates";
+import { WithdrawButton } from "./withdraw-button";
 
 export const metadata: Metadata = {
   title: "My bookings",
@@ -41,6 +42,8 @@ const STATUS_EXPLANATION: Record<BookingStatus, string> = {
   booked: "Confirmed — your stay is held. We'll be in touch about payment.",
   declined:
     "We weren't able to take this booking. Please get in touch if you'd like to look at other dates.",
+  cancelled:
+    "This booking was cancelled. The dates are free again — you're welcome to make a new request.",
 };
 
 export default async function MyBookingsPage({
@@ -209,6 +212,17 @@ function BookingGroup({
                 <p className={cx("text-sm leading-relaxed", TEXT_BODY)}>
                   {STATUS_EXPLANATION[row.status]}
                 </p>
+
+                {/*
+                  Only a request still awaiting confirmation can be withdrawn
+                  here, and only in the "Upcoming" group — withdrawing a stay
+                  whose dates have already passed would rewrite history rather
+                  than free anything. The server enforces the status rule
+                  independently (lib/cancellation.ts).
+                */}
+                {row.status === "reserved" && !muted && (
+                  <WithdrawButton bookingId={row.id} itemName={row.itemName} />
+                )}
               </li>
             );
           })}

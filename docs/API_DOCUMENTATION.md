@@ -348,6 +348,83 @@ one). Not incorrect, just heavier than needed for a straightforward state-machin
 Logged per the exception protocol in MODEL_SELECTION.md so both directions get treated the
 same way.
 
+### `POST /bookings/:id/cancel` — admin, or the booking's own customer — as built, done
+Cancel a booking. Terminal and immediate: there is no un-cancel, and no ApprovalVote is
+required. The two-admin rule exists to stop a date being *held* carelessly; releasing one is
+the safe direction, and a single decline already resolves a booking today without a second
+opinion.
+
+**Who may cancel what** (owner decision, 2026-08-26) — deliberately asymmetric:
+
+| Actor | `reserved` | `booked` | `declined` / `cancelled` |
+|-------|-----------|----------|--------------------------|
+| Admin | ✅ cancels | ✅ cancels | ❌ 409 |
+| Guest (own booking) | ✅ withdraws | ❌ 403 — must contact staff | ❌ 409 |
+| Guest (someone else's) | ❌ 404 | ❌ 404 | ❌ 404 |
+
+A guest may not cancel a confirmed stay because an advance payment has usually been arranged
+offline by that point (PRD §4/FR5b) — unwinding it is a conversation, not a button.
+
+```json
+{ "reason": "Guest called to cancel — family emergency" }
+```
+- `reason` is **required for an admin** (400 if absent or blank) — it is the record staff rely
+  on in a dispute. It is **optional for a guest**, defaulting to `"Withdrawn by guest"`.
+- Max 500 characters. Body is `.strict()` — any other key (including `status` or `cancelledBy`)
+  is rejected 400 rather than silently ignored.
+- An empty body is valid for a guest withdrawal.
+
+Which actor is calling is decided **from the session, never from the body** — a guest cannot
+claim to be an admin by sending a field. If a caller somehow holds both an admin and a customer
+cookie, the admin claim wins and that admin's id is what lands in `cancelled_by`.
+
+**Ownership is checked before status**, so a guest probing another customer's booking id gets an
+identical `404 Booking not found.` whatever state that booking is in — the refusal cannot be used
+to discover whether someone else's booking exists or what state it is in.
+
+Response `200`:
+```json
+{
+  "status": "cancelled",
+  "previousStatus": "booked",
+  "cancelledAt": "2026-08-26T09:14:22.000Z",
+  "reason": "Guest called to cancel — family emergency"
+}
+```
+
+**Date recovery is automatic, and there is no code that performs it.** Every date-blocking query
+in the app names the statuses that block by allowlist — `["booked"]` in `booking-service.ts`,
+`["reserved","booked"]` in `calendar-service.ts`, `day-detail-service.ts`, `day-mode-service.ts`
+and the bookable-items capacity check. A cancelled booking drops out of all of them the instant
+its status changes. Adding an explicit "free the dates" step would create a second source of
+truth for availability, which `ARCHITECTURE.md` rules out. If a future query ever filters by
+*excluding* `declined` rather than naming what blocks, that query is the bug.
+
+**No refund is calculated, by design.** Pricing is out of scope (PRD §4) — the app stores no room
+rates, only `advance_amount` as a manual record of cash collected offline. A percentage computed
+against that would describe the deposit, not the stay, while reading as authoritative. Cancelling
+records the fact; an admin arranges the refund offline and then sets `paymentStage` to `refunded`
+through `PUT /bookings/:id`. The admin UI warns about this whenever a payment is on record.
+
+**Schema:** `booking_status` gains `cancelled`; `bookings` gains `cancelled_at`, `cancelled_by`
+(FK to `admin_users`, **null means the guest withdrew it themselves** — the absence of an admin
+is the record, never backfilled with a placeholder) and `cancellation_reason`. A check constraint
+ties them together: `(status::text = 'cancelled') = (cancelled_at IS NOT NULL)`. The `::text`
+cast is load-bearing — drizzle runs all pending migrations in one transaction, and PostgreSQL
+refuses to evaluate an enum value added earlier in that same transaction when validating a
+constraint against the already-populated table.
+
+Implemented as a pure decision module (`src/lib/cancellation.ts`, 17 unit tests covering the full
+actor × status matrix) plus a DB-orchestration module (`src/lib/cancellation-service.ts`) that
+locks the booking `SELECT ... FOR UPDATE` — same reasoning as `/vote` — so two simultaneous
+cancel requests cannot both read a live status; the second is correctly refused 409 rather than
+overwriting the first one's record of who cancelled and why.
+
+**Audit log** (`booking_audit_log`): two rows per cancellation in the same transaction — a
+`status` row with the from/to pair, and a `cancellation_reason` row carrying the reason.
+`changed_by` is null for a guest withdrawal, with `changed_by_name` recorded as
+`"Guest (self-service)"` so the history still reads correctly.
+
 ### `PUT /bookings/:id` — admin — as built, done
 Comprehensive update: `guestName`, `phone` (compulsory, cannot be blanked), `email`,
 `paymentStage` (`unpaid`\|`advance_paid`\|`fully_paid`\|`refunded`), `advanceAmount`,

@@ -33,10 +33,25 @@ import { sql } from "drizzle-orm";
 export const adminRole = pgEnum("admin_role", ["admin", "super_admin"]);
 export const itemKind = pgEnum("item_kind", ["room", "villa"]);
 export const dayModeKind = pgEnum("day_mode_kind", ["room_mode", "villa_mode"]);
+/**
+ * `cancelled` is terminal and distinct from `declined`: a decline is the
+ * two-admin approval process rejecting a request that was never confirmed;
+ * a cancellation undoes a booking that had already been accepted (or a
+ * pending request the guest withdrew themselves). Keeping them apart matters
+ * for the audit trail — "we said no" and "it was called off" are different
+ * facts about the same date.
+ *
+ * Every date-blocking query in this app names the statuses that block by
+ * allowlist (`inArray(status, [...])`), never by excluding `declined`, so a
+ * cancelled booking stops holding its dates the moment its status changes.
+ * That is the whole date-recovery mechanism — there is no second place to
+ * update. See lib/cancellation.ts.
+ */
 export const bookingStatus = pgEnum("booking_status", [
   "reserved",
   "booked",
   "declined",
+  "cancelled",
 ]);
 export const paymentStage = pgEnum("payment_stage", [
   "unpaid",
@@ -223,6 +238,14 @@ export const bookings = pgTable(
     advanceAmount: numeric("advance_amount", { precision: 12, scale: 2 }),
     advancePaidDate: date("advance_paid_date"),
     internalNotes: text("internal_notes").notNull().default(""),
+    // Cancellation record. All three are null until the booking is cancelled,
+    // and are written together in one transaction (lib/cancellation-service.ts).
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    // The admin who cancelled it. NULL means the guest withdrew their own
+    // pending request — the absence of an admin IS the signal for who acted,
+    // so this column is never backfilled with a placeholder.
+    cancelledBy: uuid("cancelled_by").references(() => adminUsers.id),
+    cancellationReason: text("cancellation_reason"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -233,6 +256,23 @@ export const bookings = pgTable(
   (t) => [
     check("bookings_checkout_after_checkin", sql`${t.checkOut} > ${t.checkIn}`),
     check("bookings_guests_positive", sql`${t.guestsCount} > 0`),
+    // A cancelled booking must carry its timestamp, and a timestamp must not
+    // appear on a booking in any other status. Enforced here rather than only
+    // in application code so no future write path can produce a half-recorded
+    // cancellation. `cancelled_by` is deliberately NOT covered: null is
+    // meaningful there (a guest withdrawal), so it cannot be required.
+    //
+    // `status::text` is load-bearing, not incidental. Drizzle runs every
+    // pending migration inside ONE transaction, and PostgreSQL refuses to
+    // evaluate an enum value added earlier in the same transaction — adding
+    // this constraint to the already-populated `bookings` table triggers a
+    // validation scan, which would hit exactly that rule. Comparing as text
+    // never references the new enum member, so the migration applies cleanly.
+    // Do not "simplify" this back to `${t.status} = 'cancelled'`.
+    check(
+      "bookings_cancelled_at_matches_status",
+      sql`(${t.status}::text = 'cancelled') = (${t.cancelledAt} IS NOT NULL)`,
+    ),
     // Overlap lookups are the hottest query in the app: every calendar render
     // and every booking attempt scans bookings by item and date range.
     index("bookings_item_dates_idx").on(t.bookableItemId, t.checkIn, t.checkOut),
@@ -324,7 +364,7 @@ export type DayMode = typeof dayModes.$inferSelect;
 /** `room_mode` | `villa_mode` — the two values the `day_mode_kind` enum allows. */
 export type DayModeKind = (typeof dayModeKind.enumValues)[number];
 export type Booking = typeof bookings.$inferSelect;
-/** `reserved` | `booked` | `declined` — the three values the `booking_status` enum allows. */
+/** `reserved` | `booked` | `declined` | `cancelled` — the `booking_status` enum values. */
 export type BookingStatus = (typeof bookingStatus.enumValues)[number];
 /** `unpaid` | `advance_paid` | `fully_paid` | `refunded` — the `payment_stage` enum values. */
 export type PaymentStage = (typeof paymentStage.enumValues)[number];
