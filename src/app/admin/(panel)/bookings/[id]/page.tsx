@@ -96,6 +96,11 @@ export default async function AdminBookingDetailPage({
           status={booking.status}
           myVote={myVote}
           approveCount={approveCount}
+          phone={booking.phone}
+          guestName={booking.guestName}
+          itemName={booking.itemName}
+          checkIn={booking.checkIn}
+          checkOut={booking.checkOut}
         />
 
         {booking.votes.length > 0 && (
@@ -128,6 +133,12 @@ export default async function AdminBookingDetailPage({
           bookingId={booking.id}
           status={booking.status}
           paymentStage={booking.paymentStage}
+          phone={booking.phone}
+          guestName={booking.guestName}
+          itemName={booking.itemName}
+          checkIn={booking.checkIn}
+          checkOut={booking.checkOut}
+          cancelledByGuestSelf={booking.cancelledByName === null}
         />
 
         {booking.cancelledAt !== null && (
@@ -179,6 +190,10 @@ export default async function AdminBookingDetailPage({
       >
         <BookingEditForm
           bookingId={booking.id}
+          status={booking.status}
+          itemName={booking.itemName}
+          checkIn={booking.checkIn}
+          checkOut={booking.checkOut}
           initial={{
             guestName: booking.guestName,
             phone: booking.phone,

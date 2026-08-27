@@ -94,6 +94,13 @@ No model checks needed — already shipped.
   also cross-checked against real production data, customer by customer, rather than trusting
   the unit tests alone for a query that had never run before.
 
+- **Slice 18** (WhatsApp integration + advance-amount-required-to-approve, 2026-08-28, branch
+  `feature/whatsapp-integration`) used **Opus 5**, owner-confirmed before starting. No exception.
+  Justified by the same reasoning as Slice 9's `Opus 4.7` choice for this module: the change
+  touches `vote.ts`, the core trust mechanism, tightening a business rule rather than just adding
+  UI. Outcome: 12 new unit tests (255 total), zero defects found live — see `docs/tasks.md` for
+  the full verification log.
+
 See `docs/tasks.md` for the full verification log for each.
 
 ---

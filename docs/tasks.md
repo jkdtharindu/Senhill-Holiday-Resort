@@ -304,6 +304,70 @@
       against a live dev server: both numbers produce correct `wa.me` links with the message
       properly URL-encoded, and the buttons render correctly alongside the existing phone links.
 
+      Slice 18 done (2026-08-28, branch `feature/whatsapp-integration`): WhatsApp integration
+      extended across the booking lifecycle, plus a genuine new business rule bundled in. Built
+      with Opus 5, as owner-confirmed at the start of the work — matches the weight given to the
+      earlier core-logic change to this same file (Slice 9's `vote.ts`, built on Opus 4.7). No
+      exception.
+
+      **New business rule: advance amount required to approve.** `decideVoteOutcome`
+      (`src/lib/vote.ts`) previously had no awareness of `advance_amount` at all — only
+      `advance_paid_date`, used solely for queue-priority ordering, never as a gate. An admin
+      could approve a booking with zero payment on record. Added a new `hasAdvanceAmount`
+      parameter (defaulted `true` so every existing test omitting it is unaffected) and a new
+      `advance_amount_missing` rejection, checked AFTER the existing queue-blocker check (a
+      competing claim on the same dates is the more structural problem, so it takes priority) —
+      `decline` is never subject to either check. `vote-service.ts` now selects `advanceAmount` in
+      the same already-locked `SELECT ... FOR UPDATE` row (no new query) and surfaces the
+      rejection the same way `blocked_by` is surfaced: `{ error, advance_amount_missing: true }`.
+      5 new unit tests, including two ordering tests proving each higher-priority check still
+      wins when both conditions are true simultaneously.
+
+      **New module `src/lib/whatsapp-templates.ts`**, mirroring `email-templates.ts`'s
+      one-function-per-lifecycle-event shape but plain text only: `guestContactMessage`,
+      `paymentReminderMessage`, `bookingConfirmedMessage`, `bookingCancelledMessage` (the last
+      never discloses the internal cancellation reason — no `reason` field exists on its input
+      type at all, matching `bookingCancelledEmail`'s own non-disclosure). 7 new unit tests.
+
+      **Four new touch points**, all guest- or admin-initiated `wa.me` links, nothing sent by the
+      app itself (PRD §4 unaffected, same reasoning as the `/contact` buttons): a guest's
+      "WhatsApp (number)" button per `CONTACT_INFO.phones` entry on any `reserved` row in
+      `/my-bookings`; an admin's "Send payment reminder via WhatsApp" on the booking edit form
+      while `reserved` with no advance amount recorded; "Notify guest via WhatsApp" in the
+      approval panel once a booking reaches `booked`; and the same in the cancellation panel once
+      `cancelled`, wording correctly distinguishing a guest's own withdrawal from an admin
+      cancellation. The existing compulsory `phone` field is reused as-is (no schema change),
+      relabelled "Phone / WhatsApp number" in both the guest booking form and the admin edit form.
+
+      Adjacent fix required by the new invariant: `bookingApprovedEmail` used to say "if you
+      haven't arranged your advance payment yet..." — now permanently false once a booking can
+      only reach `booked` with the amount already on record, so the line was replaced with a
+      thank-you.
+
+      Verified against the live database with a real temporary booking and a temporary second
+      admin (both fully removed afterward, confirmed by direct query): attempting to approve with
+      no advance amount was rejected with the new message and the in-page hint; recording an
+      amount and saving made the rejection clear and the payment-reminder button disappear (gated
+      on the saved value, not live-edited state); a first approve succeeded; a second, distinct
+      admin's approve (driven directly through `castVote`, the same real service module the route
+      calls) moved the booking to `booked` and the "Notify guest via WhatsApp" button appeared
+      with the correct pre-filled confirmation message; cancelling the booking showed "Notify
+      guest via WhatsApp" with the correct cancelled-by-admin wording, the refund-if-applicable
+      line, and — confirmed explicitly — no trace of the cancellation reason text anywhere in the
+      drafted message. `/contact` re-checked unaffected. The guest-facing `/my-bookings` button
+      and the relabelled booking-form field were confirmed rendering correctly against a real
+      signed-in customer session encountered in the dev browser, but that session's own real
+      (and already-cancelled) booking wasn't in `reserved` state to show the new button live, and
+      no test booking could be created for it without a real Google sign-in — so the guest-side
+      button itself is verified by code review, the identical `LinkButton`/`whatsappLink` pattern
+      already proven twice on the admin side moments earlier, and the same pattern's prior
+      verification on `/contact`, rather than by watching it render for an authenticated guest in
+      this pass.
+
+      12 new unit tests (255 total, up from 243). Production build succeeds, lint clean,
+      typecheck clean. `docs/API_DOCUMENTATION.md` updated for the new vote rejection and the
+      four new WhatsApp touch points.
+
 ## Next To Do ○ (suggested build order — vertical slices)
 
 **⚠️ MODEL SELECTION REQUIRED:** Before starting any slice, check [MODEL_SELECTION.md](MODEL_SELECTION.md) for the assigned Claude model. Claude will ask you to confirm before proceeding.

@@ -18,9 +18,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { cx, TEXT_BODY } from "@/components/ui/styles";
 import type { BookingStatus } from "@/db/schema";
+import { whatsappLink } from "@/lib/contact-info";
+import type { DateOnly } from "@/lib/dates";
+import { bookingConfirmedMessage } from "@/lib/whatsapp-templates";
 
 interface VotePanelProps {
   bookingId: string;
@@ -28,6 +31,11 @@ interface VotePanelProps {
   /** This admin's currently standing vote, if they have already voted. */
   myVote: "approve" | "decline" | null;
   approveCount: number;
+  phone: string;
+  guestName: string;
+  itemName: string;
+  checkIn: DateOnly;
+  checkOut: DateOnly;
 }
 
 export function VotePanel({
@@ -35,11 +43,17 @@ export function VotePanel({
   status,
   myVote,
   approveCount,
+  phone,
+  guestName,
+  itemName,
+  checkIn,
+  checkOut,
 }: VotePanelProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<"approve" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blockedBy, setBlockedBy] = useState<{ bookingId: string; guestName: string } | null>(null);
+  const [advanceAmountMissing, setAdvanceAmountMissing] = useState(false);
   const [confirmingDecline, setConfirmingDecline] = useState(false);
 
   const resolved = status !== "reserved";
@@ -47,6 +61,7 @@ export function VotePanel({
   async function castVote(vote: "approve" | "decline") {
     setError(null);
     setBlockedBy(null);
+    setAdvanceAmountMissing(false);
     setBusy(vote);
     try {
       const response = await fetch(`/api/bookings/${bookingId}/vote`, {
@@ -57,11 +72,13 @@ export function VotePanel({
       const data = (await response.json().catch(() => null)) as {
         error?: string;
         blocked_by?: { bookingId: string; guestName: string };
+        advance_amount_missing?: boolean;
       } | null;
 
       if (!response.ok) {
         setError(data?.error ?? "Could not record your vote. Please try again.");
         setBlockedBy(data?.blocked_by ?? null);
+        setAdvanceAmountMissing(data?.advance_amount_missing ?? false);
         setBusy(null);
         return;
       }
@@ -95,7 +112,24 @@ export function VotePanel({
       },
     };
     const { tone, text } = closed[status];
-    return <Alert tone={tone}>{text}</Alert>;
+    return (
+      <div className="flex flex-col gap-3">
+        <Alert tone={tone}>{text}</Alert>
+        {status === "booked" && (
+          <div>
+            <LinkButton
+              href={whatsappLink(phone, bookingConfirmedMessage({ guestName, itemName, checkIn, checkOut }))}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="secondary"
+              size="sm"
+            >
+              Notify guest via WhatsApp
+            </LinkButton>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -112,6 +146,14 @@ export function VotePanel({
               >
                 View {blockedBy.guestName}&apos;s booking &rarr;
               </Link>
+            </>
+          )}
+          {advanceAmountMissing && (
+            <>
+              {" "}
+              <a href="#advance-amount" className="font-medium underline underline-offset-2">
+                Record it in the form below &darr;
+              </a>
             </>
           )}
         </Alert>

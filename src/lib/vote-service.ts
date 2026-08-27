@@ -54,7 +54,8 @@ export type CastVoteResult =
     }
   | { ok: false; status: 404; error: string }
   | { ok: false; status: 409; error: string; currentStatus: BookingStatus }
-  | { ok: false; status: 409; error: string; blockedBy: { bookingId: string; guestName: string } };
+  | { ok: false; status: 409; error: string; blockedBy: { bookingId: string; guestName: string } }
+  | { ok: false; status: 409; error: string; advanceAmountMissing: true };
 
 /**
  * Cast (or overwrite) one admin's vote on a booking, atomically updating
@@ -82,6 +83,7 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
         checkOut: bookings.checkOut,
         createdAt: bookings.createdAt,
         advancePaidDate: bookings.advancePaidDate,
+        advanceAmount: bookings.advanceAmount,
         guestName: bookings.guestName,
         email: bookings.email,
         guestsCount: bookings.guestsCount,
@@ -139,6 +141,7 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
       standing,
       { adminId: input.adminId, vote: input.vote },
       queueBlocker,
+      booking.advanceAmount !== null,
     );
 
     if (outcome.action === "rejected") {
@@ -151,6 +154,14 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
             (outcome.blocker.advancePaidDate ? " and has an advance payment recorded" : "") +
             " — decide that one before approving this one.",
           blockedBy: { bookingId: outcome.blocker.id, guestName: outcome.blocker.guestName },
+        };
+      }
+      if (outcome.reason === "advance_amount_missing") {
+        return {
+          ok: false,
+          status: 409 as const,
+          error: "Record an advance amount for this booking before approving it.",
+          advanceAmountMissing: true as const,
         };
       }
       return {

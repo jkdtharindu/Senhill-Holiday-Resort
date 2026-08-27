@@ -173,8 +173,7 @@ export function bookingApprovedEmail(details: BookingEmailDetails): EmailContent
         <tr><td style="padding:4px 0;color:#78716c;">Dates</td><td style="padding:4px 0;font-weight:600;">${dates}</td></tr>
         <tr><td style="padding:4px 0;color:#78716c;">Guests</td><td style="padding:4px 0;font-weight:600;">${details.guestsCount}</td></tr>
       </table>
-      <p>If you haven't arranged your advance payment yet, please get in touch so we can confirm the details.</p>
-      <p>We look forward to hosting you.</p>
+      <p>Thank you for arranging your advance payment — we look forward to hosting you.</p>
     `),
     text: `Hi ${details.guestName},
 
@@ -184,9 +183,7 @@ Item: ${details.itemName}
 Dates: ${datesText}
 Guests: ${details.guestsCount}
 
-If you haven't arranged your advance payment yet, please get in touch so we can confirm the details.
-
-We look forward to hosting you.
+Thank you for arranging your advance payment — we look forward to hosting you.
 ${contactFooterText()}`,
   };
 }
