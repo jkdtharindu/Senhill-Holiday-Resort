@@ -220,6 +220,23 @@ unless every night clears (FR5a — no partial-booking, no auto-splitting):
 Also rejected (400) if `guests_count` exceeds the BookableItem's `capacity`, or if the item is
 missing/deactivated.
 
+**Added 2026-08-27 — multiple simultaneous requests, capped.** Nothing stops a customer from
+holding several `reserved` bookings at once — each request is validated independently of the
+customer's other requests, which is what lets a guest submit a backup date range while an
+earlier request is still under review. Turned out to require no new endpoint or schema at all;
+see `docs/UPCOMING_UPDATES.md` §1 for why the originally-scoped "Reserve Request" feature was
+mostly already true of the existing behavior.
+
+The one genuinely new rule: **rejected (400) once a customer already holds `MAX_RESERVED_PER_CUSTOMER`
+(6) `reserved` bookings**, across every item — abuse protection, since nothing previously bounded
+how many a guest could stack up. Checked before any per-night work, since a customer at the cap
+cannot be helped by picking different dates:
+```json
+{ "error": "You already have 6 requests awaiting review. Please wait for one to be approved or declined before submitting another." }
+```
+This error has no `conflicting_dates` field — it is a customer-level refusal, not a dates
+problem, and the two shapes mean different things to the guest reading the response.
+
 `email` on the created booking is taken from the signed-in customer's own account, never from the
 request body — it is how staff reach the account holder, so it must not be able to diverge from
 who actually owns the account. `guest_name` and `phone` come from the body since a signed-in guest

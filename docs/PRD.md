@@ -69,6 +69,12 @@ payment amount and collection happen manually, outside the system.
   specific conflicting date(s).
 - FR5b: Customer sees a fixed notice during booking that an advance payment is required to
   confirm — no amount or payment collection happens in-app.
+- FR5c: **Added 2026-08-27.** A customer may hold multiple simultaneous `reserved` requests —
+  each is validated and approved/declined independently of the others, so a guest can submit a
+  backup request for alternative dates while an earlier one is still under review. Capped at 6
+  simultaneous `reserved` requests per customer, across every item, as abuse protection (owner
+  decision). No dedicated UI for this — the existing "Book another stay" link already reaches
+  the booking form regardless of any pending request, so nothing new needed to be exposed.
 - FR6: Log in via Google to track own booking status (`reserved` vs `booked` vs `declined` vs
   `cancelled`).
 - FR6a: **Superseded 2026-08-26.** A customer may withdraw their OWN booking while it is still

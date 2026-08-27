@@ -224,3 +224,51 @@ still cannot be withdrawn. **Declining privilege is always safe; claiming it nev
 caller decline privilege explicitly, never infer intent, and never let the body claim a role.
 
 ---
+
+## 2026-08-27: "Reserve Request" feature — investigated before building, most of it already existed
+
+**Decision:** Ship only a `MAX_RESERVED_PER_CUSTOMER = 6` cap (`src/lib/booking.ts`) plus the
+query to enforce it (`src/lib/booking-service.ts`). No new endpoint, no schema change, no new UI.
+
+**Why this is the whole feature.** `docs/UPCOMING_UPDATES.md` §1 specced "Reserve Request" as a
+new endpoint, a schema addition (`reference_booking_id`), and a dedicated UI button. Before
+writing any of that, checked what `validateBookingRequest` (`lib/booking.ts`) actually does: it
+has never looked at a customer's OTHER bookings — only at the requested item's own conflicts. A
+guest could already submit unlimited simultaneous `reserved` requests, each judged independently,
+with zero code involved. `my-bookings` also already has a "Book another stay" link reaching the
+booking form regardless of any pending request. The spec's own §1.2 and §1.4 already said "no
+validation change needed" / "no schema changes needed" — which turned out to be literally true,
+not just an estimate.
+
+Presented this to the owner before building anything, rather than implementing the originally-
+scoped new endpoint/UI unchanged. Two decisions followed:
+1. **No dedicated "Request alternative dates" button** — the existing "Book another stay" link
+   already does the job; a second button for the same destination is more surface without a
+   functional gain.
+2. **A cap of 6**, not the spec's suggested "3-5" — owner's number, taken as given rather than
+   negotiated, since it's a business judgment (how many pending requests one guest may hold) with
+   no technical reason to prefer a different value.
+
+**Where the cap lives, and why there:** the check runs INSIDE `validateBookingRequest`, before
+the per-night date work, not as a separate guard in the route or service layer. It is a
+customer-level fact independent of which dates were asked for, so a customer at the cap gets the
+cap-specific message even if their dates also happen to be bad — checking dates first would have
+produced a misleading "these dates don't work" error when the real reason is unrelated to dates
+at all. Verified by a dedicated test asserting the cap message wins even against garbage dates.
+
+**Rejected alternatives:**
+1. Build the originally-scoped new endpoint (`POST /bookings/:id/reserve-request`) anyway, since
+   it was already speced — rejected: it would have duplicated `POST /bookings`'s existing
+   validation logic for no behavioral difference, creating two code paths that could drift.
+2. Add the optional `reference_booking_id` column to link related requests — rejected as
+   speculative: nothing in the actual requirement needs requests to be linked (each is judged and
+   displayed independently), and the spec itself listed it as "consider," not required.
+3. A per-item cap instead of a customer-wide one — rejected: the concern named by the owner was
+   one guest tying up an unbounded number of pending requests in total, not how they're
+   distributed across rooms.
+
+**Revisit when:** a real need for linked/grouped requests emerges (e.g. reporting "these 3
+requests were all the same guest's attempt to book the same trip") — at that point
+`reference_booking_id` becomes worth adding, rather than speculative.
+
+---

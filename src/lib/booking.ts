@@ -53,6 +53,21 @@ export interface ExistingBookingRange {
   checkOut: DateOnly;
 }
 
+/**
+ * Largest number of `reserved` (pending) bookings one customer may hold at
+ * once, across every item. Added 2026-08-27 (owner decision) as abuse
+ * protection: nothing else limits how many simultaneous requests a guest can
+ * stack up, since each request is validated independently of the others by
+ * design — that independence is what lets a guest hold a backup request
+ * while their first is still under review (see `docs/UPCOMING_UPDATES.md`
+ * §1). This cap bounds it rather than removing it.
+ *
+ * Deliberately customer-wide, not per-item: the concern is one guest tying
+ * up an unbounded number of pending requests, not how they're distributed
+ * across rooms.
+ */
+export const MAX_RESERVED_PER_CUSTOMER = 6;
+
 export interface BookingRequestInput {
   checkIn: DateOnly;
   checkOut: DateOnly;
@@ -77,6 +92,14 @@ export function validateBookingRequest(
   window: BookingWindow,
   dayModesByDate: ReadonlyMap<DateOnly, DayModeKind>,
   existingBookings: readonly ExistingBookingRange[],
+  /**
+   * How many `reserved` bookings the requesting customer already holds,
+   * across every item. Defaults to 0 so every call site written before this
+   * check existed — a customer-count fact none of them were testing —
+   * keeps passing unchanged; real callers (booking-service.ts) always pass
+   * the true count.
+   */
+  existingReservedCount = 0,
 ): BookingValidationResult {
   if (!item || !item.active) {
     return { ok: false, error: "This room or villa is not available for booking." };
@@ -94,6 +117,19 @@ export function validateBookingRequest(
     return {
       ok: false,
       error: `This ${item.kind} sleeps at most ${item.capacity} guests.`,
+    };
+  }
+
+  // A customer-level fact, unrelated to which item or dates were asked for —
+  // checked before the per-night work below since there is no reason to
+  // evaluate specific dates for a request that cannot be accepted regardless
+  // of what they are.
+  if (existingReservedCount >= MAX_RESERVED_PER_CUSTOMER) {
+    return {
+      ok: false,
+      error:
+        `You already have ${MAX_RESERVED_PER_CUSTOMER} requests awaiting review. ` +
+        "Please wait for one to be approved or declined before submitting another.",
     };
   }
 

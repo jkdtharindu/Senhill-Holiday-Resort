@@ -15,7 +15,7 @@
  * flagged as a follow-up, not a blocker for this slice's scope.
  */
 
-import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, count, eq, gt, inArray, lte } from "drizzle-orm";
 import { after } from "next/server";
 
 import { db } from "@/db";
@@ -94,6 +94,18 @@ async function loadExistingBookingsForItem(
     );
 }
 
+/** How many `reserved` bookings this customer already holds, across every item. */
+async function countCustomerReservedBookings(
+  client: Queryable,
+  customerId: string,
+): Promise<number> {
+  const [row] = await client
+    .select({ n: count() })
+    .from(bookings)
+    .where(and(eq(bookings.customerId, customerId), eq(bookings.status, "reserved")));
+  return row?.n ?? 0;
+}
+
 /**
  * Fetch everything `validateBookingRequest` needs from `client` and run it.
  * Called once against the pooled `db` for the fast-fail check, then again
@@ -105,9 +117,10 @@ async function fetchAndValidate(client: Queryable, input: CreateBookingInput, wi
   const item = await loadItem(client, input.bookableItemId);
   const nights = nightsOfStay(input.checkIn, input.checkOut);
 
-  const [dayModesByDate, existingBookings] = await Promise.all([
+  const [dayModesByDate, existingBookings, reservedCount] = await Promise.all([
     loadDayModesForNights(client, nights),
     loadExistingBookingsForItem(client, input.bookableItemId, input.checkIn, input.checkOut),
+    countCustomerReservedBookings(client, input.customerId),
   ]);
 
   return validateBookingRequest(
@@ -116,6 +129,7 @@ async function fetchAndValidate(client: Queryable, input: CreateBookingInput, wi
     window,
     dayModesByDate,
     existingBookings,
+    reservedCount,
   );
 }
 

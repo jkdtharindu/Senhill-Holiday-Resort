@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  MAX_RESERVED_PER_CUSTOMER,
   validateBookingRequest,
   type BookingItemInfo,
   type ExistingBookingRange,
@@ -379,5 +380,116 @@ describe("validateBookingRequest — happy path", () => {
       [],
     );
     assert.deepEqual(result, { ok: true });
+  });
+
+  it("existingReservedCount defaults to 0 when omitted — every call site above stays valid", () => {
+    // Proves the default itself, not just that omitting the argument compiles.
+    const dayModes = modes(roomModeRange("2026-09-10", "2026-09-12"));
+    const withDefault = validateBookingRequest(
+      { checkIn: "2026-09-10", checkOut: "2026-09-13", guestsCount: 2 },
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+    );
+    const withExplicitZero = validateBookingRequest(
+      { checkIn: "2026-09-10", checkOut: "2026-09-13", guestsCount: 2 },
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      0,
+    );
+    assert.deepEqual(withDefault, withExplicitZero);
+  });
+});
+
+describe("validateBookingRequest — reserved-request cap (owner decision, 2026-08-27)", () => {
+  const dayModes = modes(roomModeRange("2026-09-10", "2026-09-12"));
+  const CLEAN_REQUEST = { checkIn: "2026-09-10", checkOut: "2026-09-13", guestsCount: 2 };
+
+  it("accepts a request one below the cap", () => {
+    const result = validateBookingRequest(
+      CLEAN_REQUEST,
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      MAX_RESERVED_PER_CUSTOMER - 1,
+    );
+    assert.deepEqual(result, { ok: true });
+  });
+
+  it("rejects a request exactly AT the cap — a customer at the limit cannot add a 7th", () => {
+    const result = validateBookingRequest(
+      CLEAN_REQUEST,
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      MAX_RESERVED_PER_CUSTOMER,
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("stays rejected well past the cap", () => {
+    const result = validateBookingRequest(
+      CLEAN_REQUEST,
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      MAX_RESERVED_PER_CUSTOMER + 10,
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("the cap error names the actual limit, not a hardcoded number that could drift from the constant", () => {
+    const result = validateBookingRequest(
+      CLEAN_REQUEST,
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      MAX_RESERVED_PER_CUSTOMER,
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return; // narrow for TypeScript
+    assert.match(result.error, new RegExp(String(MAX_RESERVED_PER_CUSTOMER)));
+    // And it must not report per-night conflicts — this is a customer-level
+    // refusal, not a dates problem, and the two error shapes mean different
+    // things to the guest reading the response.
+    assert.equal(result.conflictingDates, undefined);
+  });
+
+  it("the cap is checked BEFORE per-night conflicts — a customer at the cap gets the cap message even on genuinely bad dates", () => {
+    // If date conflicts were checked first, this test's obviously-unavailable
+    // date would produce a conflictingDates error instead, hiding the real
+    // reason: this customer cannot submit anything further right now.
+    const result = validateBookingRequest(
+      { checkIn: "2026-01-01", checkOut: "2026-01-02", guestsCount: 2 }, // outside WINDOW too
+      ROOM,
+      WINDOW,
+      new Map(), // no day mode set anywhere
+      [],
+      MAX_RESERVED_PER_CUSTOMER,
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /awaiting review/);
+  });
+
+  it("a capacity violation still wins over the cap — malformed requests are refused on their own terms first", () => {
+    const result = validateBookingRequest(
+      { checkIn: "2026-09-10", checkOut: "2026-09-13", guestsCount: 999 },
+      ROOM,
+      WINDOW,
+      dayModes,
+      [],
+      MAX_RESERVED_PER_CUSTOMER,
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.match(result.error, /sleeps at most/);
   });
 });

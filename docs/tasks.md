@@ -270,6 +270,31 @@
       reaches someone not looking at the dashboard. Email-based alerting was considered and
       deferred: an email about too much email can feed the spike it reports. See `MAINTENANCE.md`
       §5.
+      Slice 17 done (2026-08-27): "Reserve Request for Reserved Bookings" — the roadmap's own
+      next item. Built with Sonnet 5, no exception, once the real scope became clear.
+      Investigated before writing any code: `validateBookingRequest` (`lib/booking.ts`) has never
+      looked at a customer's OTHER bookings, only at conflicts on the requested item itself, so a
+      guest could already hold unlimited simultaneous `reserved` requests with zero code
+      involved. `my-bookings` also already had a "Book another stay" link reaching the booking
+      form regardless of any pending request. The original spec's own notes ("no validation
+      change needed", "no schema changes needed") turned out to be literally true.
+      Presented this to the owner before building the originally-scoped new endpoint/UI
+      unchanged. Decided: no dedicated UI (existing link is sufficient), ship the one genuinely
+      new piece — a hard cap of 6 simultaneous `reserved` bookings per customer, across every
+      item, as abuse protection. `MAX_RESERVED_PER_CUSTOMER` in `lib/booking.ts`, enforced by a
+      new `countCustomerReservedBookings` query in `lib/booking-service.ts`. No new endpoint, no
+      schema change, no `reference_booking_id` column (rejected as speculative — nothing needs
+      requests linked, each is judged and displayed independently).
+      The cap is checked inside `validateBookingRequest`, before any per-night date work — a
+      customer-level fact, so it fires regardless of which dates were asked for. Verified with a
+      dedicated test that the cap message is never masked by an unrelated date-conflict error,
+      and that a genuine capacity violation still takes priority over the cap.
+      Verified: 7 new unit tests (237 total) — the exact boundary at 6, well past it, the
+      cap-before-dates ordering, and priority against a capacity violation. The count query was
+      also cross-checked against every real customer in the production database (not just unit
+      tests) before being trusted, since it had never run before. Production build succeeds,
+      lint clean.
+      Full rationale, including the three rejected alternatives, in `MEMORY.md` (2026-08-27).
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

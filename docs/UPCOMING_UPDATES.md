@@ -95,6 +95,27 @@
   - Not built: delivery confirmation (needs Resend webhooks), retries, push alerting.
   - Status: ✅ Live on main branch
 
+- [x] **Reserve Request for Reserved Bookings** — ✅ **SHIPPED 2026-08-27** (Sonnet 5, no
+  exception) — **turned out to be mostly already built.**
+  - Investigated before building anything: `validateBookingRequest` never checked a customer's
+    OTHER bookings, and `my-bookings` already had a "Book another stay" link reaching the
+    booking form regardless of any pending request. A guest could already hold multiple
+    simultaneous `reserved` bookings, each judged independently, with no code change at all.
+  - Given that finding, asked the owner what was actually left rather than building the
+    originally-scoped dedicated UI and new endpoint (§1 below) unchanged. Decided: skip the new
+    UI (existing button is sufficient), add the one genuinely new piece — an abuse cap of 6
+    simultaneous `reserved` bookings per customer.
+  - Built: `MAX_RESERVED_PER_CUSTOMER` and the check in `src/lib/booking.ts`, a new
+    `countCustomerReservedBookings` query in `src/lib/booking-service.ts`. No new endpoint, no
+    schema change — confirming the original spec's own note that neither would be needed.
+  - Verified: 7 new unit tests (237 total) covering the boundary at exactly the cap, that it's
+    checked before per-night date work (so a customer at the cap gets the cap message even on
+    otherwise-bad dates, not a misleading date-conflict error), and that a capacity violation
+    still wins over the cap (malformed requests are refused on their own terms first). Also
+    cross-checked the count query against real production data, customer by customer.
+  - Original requirements below (§1) describe the full originally-scoped feature; most of its
+    UI/API/schema sections were **not needed** — see the note above for what changed and why.
+
 - [x] **Contact page** (2026-08-27)
   - Completed: public `/contact` with phone numbers, email addresses, and a map to the property,
     plus a notice asking guests to call ahead and confirm the final approach road — guards
@@ -120,12 +141,10 @@
     required. Two of the three admins are not being emailed and must check the panel.
   - See `docs/MAINTENANCE.md` §5 for the full trade-off and the exact provider error.
 
-- [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)
-  - Why: Guests should be able to request alternative dates while their original booking is pending review
-  - Complexity: Medium
-  - Impact: Better UX for booking management during approval phase
-  - Files: New `src/app/api/bookings/[id]/reserve-request/route.ts`, `src/lib/reserve-request.ts`, UI updates
-  - Status: **NEXT TO BUILD**
+- [x] **1. Reserve Request for Reserved Bookings** — ✅ **SHIPPED 2026-08-27** (Sonnet 5, no
+  exception) — see the "Recently Completed" entry above. Turned out to need none of the new
+  endpoint/module named below — the existing booking flow already allowed it; only an abuse cap
+  was genuinely new.
 
 - [x] **2. Booking Cancellation System** — ✅ **SHIPPED 2026-08-26** (Opus 5, no exception)
   - Built: `POST /bookings/:id/cancel`, `src/lib/cancellation.ts` (17 unit tests),
@@ -181,6 +200,17 @@
 ---
 
 ## 1. Reserve Request for Reserved Bookings
+
+> **✅ Shipped 2026-08-27 — but NOT as specced below.** Investigating before building revealed
+> most of this was already true of the existing booking flow: `POST /bookings` never checked a
+> customer's other bookings, so §1.2's "new endpoint" and §1.4's schema note were both already
+> correct as written ("no validation change needed", "no schema changes needed") — nothing to
+> build. §1.1's dedicated UI was judged unnecessary (owner decision) since "Book another stay"
+> already reaches the form. The one real gap was §1.3's "optional" abuse limit, built as a hard
+> cap of 6 simultaneous `reserved` bookings per customer. See the "Recently Completed" entry
+> above and `docs/API_DOCUMENTATION.md`'s `POST /bookings` section for what actually shipped.
+> The requirements below are kept as the original spec, for the record — most did not need
+> building.
 
 ### Overview
 Allow guests to submit additional reserve requests for alternative dates **while their current booking is in `reserved` status** (pending admin approval).

@@ -78,6 +78,21 @@ No model checks needed — already shipped.
   alone: schema shape confirmed column-by-column, existing data confirmed untouched, and a real
   send driven end-to-end to watch the counter and log row update. Migration applied to production
   with the owner's explicit approval per `HITL.md`.
+- **Slice 17** ("Reserve Request" — the roadmap's own next slice, 2026-08-27) used **Sonnet 5**,
+  as assessed once the actual scope became clear (one business rule, one pure-function change,
+  one new query — well within Sonnet 5's established band, not the kind of open-ended
+  multi-constraint reasoning Opus 5 is reserved for). No exception.
+
+  Investigated the existing code before writing anything and found most of the originally-scoped
+  feature already worked — see `MEMORY.md` (2026-08-27) for the full account. What actually
+  shipped was smaller than the roadmap entry implied: a customer-wide cap of 6 simultaneous
+  `reserved` bookings, no new endpoint, no schema change, no new UI.
+
+  Outcome: 7 new unit tests (237 total), covering the exact boundary, that the cap is checked
+  before per-night date work (so its error message is never masked by an unrelated
+  date-conflict error), and that a capacity violation still takes priority. The count query was
+  also cross-checked against real production data, customer by customer, rather than trusting
+  the unit tests alone for a query that had never run before.
 
 See `docs/tasks.md` for the full verification log for each.
 
