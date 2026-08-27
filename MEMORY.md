@@ -272,3 +272,40 @@ requests were all the same guest's attempt to book the same trip") — at that p
 `reference_booking_id` becomes worth adding, rather than speculative.
 
 ---
+
+## 2026-08-28: WhatsApp integration across the booking lifecycle + advance-amount required to approve
+
+**Decision:** Extended the guest-initiated WhatsApp click-to-chat pattern (built 2026-08-27 for
+`/contact`) into four more points: a guest's "Contact hotel via WhatsApp" button on any pending
+request in `/my-bookings`, and three admin-initiated notices (payment reminder, booking-confirmed,
+cancelled) via the same `wa.me` mechanism. Bundled a real business-rule change: `decideVoteOutcome`
+(`src/lib/vote.ts`) now refuses an `approve` vote until the booking has an advance amount
+recorded — a new `hasAdvanceAmount` parameter, checked after the existing approval-queue block.
+The existing compulsory `phone` field is reused as the WhatsApp number (relabelled in the UI); no
+schema change.
+
+**Why now:** Google sign-in doesn't reliably supply a phone number (see the Slice 3 account), so
+`phone` collected at booking time is the one contact detail the app can count on — and it was
+already being used for `wa.me` links since 2026-08-27. Separately, the two-admin approval step
+existed to prevent a date being held carelessly, but nothing stopped an admin from approving a
+booking with zero payment ever recorded against it, which defeated the step's practical purpose.
+
+**Rejected alternatives (settled by asking the owner directly before writing any code):**
+1. Route the guest's "contact hotel" button to one primary WhatsApp number only — rejected in
+   favor of both existing property numbers (`CONTACT_INFO.phones`), letting the guest pick, same
+   as the existing `/contact` page.
+2. Give each admin their own WhatsApp number for a per-admin picker — rejected: `admin_users` has
+   no phone field today, and adding one for this alone was heavier than the ask. Revisit if the
+   owner wants messages routed to a specific admin rather than "the hotel" generically.
+3. A distinct `whatsapp_number` column separate from `phone` — rejected as speculative: no guest
+   has indicated a different number for calls vs. WhatsApp, and `phone` was already compulsory and
+   already serving this purpose.
+4. A soft warning instead of a hard block on the missing-advance-amount case — rejected: the owner
+   confirmed a hard block, matching the severity of the existing `earlier_claim_pending`
+   queue-block rather than setting a softer precedent for an equally load-bearing rule.
+
+**Revisit when:** a guest or admin actually needs a WhatsApp number different from their voice
+number (add the distinct field then), or messages need routing to a specific admin rather than
+"the hotel" (add per-admin numbers then).
+
+---

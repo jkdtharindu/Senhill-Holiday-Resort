@@ -102,12 +102,28 @@ payment amount and collection happen manually, outside the system.
   embedded map's routing. Each phone number has a WhatsApp button (`wa.me` click-to-chat, guest-
   initiated with a pre-filled draft) alongside its `tel:` link — this is not automated messaging
   and does not touch §4's SMS/WhatsApp non-goal, since nothing is sent by the app itself.
+- FR6d: **Added 2026-08-28.** Extends FR6c's click-to-chat pattern into the booking lifecycle
+  itself: a guest gets a "Contact hotel via WhatsApp" button on any pending (`reserved`) request
+  in `/my-bookings`, addressed to either of the property's WhatsApp numbers with the booking's
+  details pre-filled. Same non-automated, guest-initiated nature as FR6c — §4's non-goal is
+  unaffected. The compulsory `phone` field collected at booking (FR5) is reused as the WhatsApp
+  number, relabelled accordingly in the UI; no new field was added.
 
 **Admin**
 - FR7: Log in via email/password (fully separate from customer Google auth).
 - FR8: View all bookings with full guest details, filterable by status/date/room.
 - FR9: Approve or decline a booking. Two distinct admin approvals move it to `booked`. A single
   decline from either required admin moves it to `declined` immediately.
+  **Added 2026-08-28:** an `approve` vote is now refused until an advance amount has been
+  recorded on the booking (FR10) — closes a gap where a booking could previously reach `booked`
+  with zero payment on record, which defeated the practical point of the approval step. `decline`
+  is unaffected; it only frees a date, so there is nothing to gate. See `MEMORY.md` (2026-08-28)
+  for the rejected alternative (a soft warning instead of a hard block).
+- FR9a: **Added 2026-08-28.** Once a booking reaches `booked` under FR9, or is cancelled under
+  FR6a/FR6b, or has a payment reminder due while still `reserved` with no advance amount on
+  record, the admin gets a ready-made WhatsApp message (via the same `wa.me` click-to-chat
+  mechanism as FR6c/FR6d) addressed to the guest's own number, to send at their discretion. Not
+  automated — the admin still has to press send.
 - FR10: Manually set PaymentStage and AdvancePayment amount/date per booking.
 - FR11: Set DayMode (`room_mode` \| `villa_mode`) per calendar date, in advance.
 - FR11a: **Bulk-assign DayMode by pattern** — e.g. select "all weekends" (Saturdays + Sundays)

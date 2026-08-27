@@ -1,6 +1,6 @@
 # Vercel Deployment Status
 
-**Last Updated:** 2026-08-27
+**Last Updated:** 2026-08-28
 **Status:** ✅ Live in production — with one known functional gap (see below)
 
 **Production URL:** https://senhill-holiday-resort.vercel.app
@@ -64,6 +64,15 @@ cancellation (guest self-withdrawal + admin cancel), the approval-queue block, t
 color-coded availability calendar, the public `/contact` page, and email notifications for
 booking confirmation / admin alert / approved / declined / cancelled (subject to the domain gap
 above). See `docs/tasks.md` for the full slice-by-slice build order and verification log.
+
+**Added 2026-08-28** (merged and deployed same day, PR #1): an `approve` vote is now refused until
+an advance amount is recorded on the booking (`src/lib/vote.ts`) — no migration involved, pure
+logic change. Alongside it, WhatsApp click-to-chat extended beyond `/contact` into the booking
+lifecycle: a guest's "Contact hotel via WhatsApp" button on pending requests in `/my-bookings`,
+and admin-side ready-made WhatsApp messages for a payment reminder, a booking-confirmed notice,
+and a cancellation notice. All guest/admin-initiated `wa.me` links, nothing sent automatically.
+Verified live against production directly after deploy (read-only, against real existing
+bookings) — see `docs/tasks.md`'s Slice 18 entry for the full verification log.
 
 ## Google OAuth redirect URI
 
