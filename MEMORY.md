@@ -133,3 +133,42 @@ table exists — the owner asked on 2026-08-27 about alerting on unusual daily v
 table would close the "no record of send attempts" gap that made this bug invisible.
 
 ---
+
+## 2026-08-27: A request body may DECLINE privilege, never claim it (`actingAs: "guest"`)
+
+**The bug:** the owner could not withdraw their own pending booking from the guest
+"My bookings" screen. It failed with "A cancellation reason is required" — a message from the
+ADMIN branch of `POST /bookings/:id/cancel`, which they were never meant to reach.
+
+**Cause:** the two auth systems are independent, so one browser can hold a customer cookie and an
+admin cookie simultaneously. The route resolved that by letting the admin session win. Reasonable
+for the admin panel, wrong here: the guest withdraw button sends no reason (guests are not
+required to explain themselves), so an owner — permanently holding both cookies — hit the admin
+branch and was refused. Their own request became un-withdrawable from the guest UI. Not an edge
+case for this property, where the owner books rooms.
+
+**Fix:** the guest button sends `actingAs: "guest"`, and the route skips the admin lookup when it
+sees it.
+
+**The principle, which is the part worth keeping:** this does not violate the route's own rule
+that the actor is decided from the session and never from the body. The body can only make a
+caller GIVE UP admin powers, never claim them. There is deliberately no `actingAs: "admin"`, and
+the field is typed as a literal rather than a boolean or free string so one cannot be added
+casually. Routing through the guest path applies the guest rules in full — ownership is still
+checked against the customer session, so it reaches nobody else's booking, and a `booked` stay
+still cannot be withdrawn. **Declining privilege is always safe; claiming it never is.**
+
+**Rejected alternatives:**
+1. Drop the reason requirement for admins — rejected: the reason is what staff rely on in a
+   dispute, and it exists for accountability when cancelling someone else's stay.
+2. Have the route load the booking and treat "admin cancelling their own booking" as a guest
+   withdrawal — rejected: `admin_users` and `customers` are deliberately separate systems with no
+   shared key, so linking them means matching on email, which `MAINTENANCE.md` §1 already rules
+   out as unreliable.
+3. Split into two endpoints, one per actor — rejected for the reason the route was unified in the
+   first place: one rule about who may cancel what, in one place, cannot drift.
+
+**Revisit when:** another route needs to serve both actors. The same pattern applies — let the
+caller decline privilege explicitly, never infer intent, and never let the body claim a role.
+
+---

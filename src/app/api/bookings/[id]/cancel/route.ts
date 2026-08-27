@@ -12,6 +12,20 @@
  * both cookies at once; an admin acting through the admin panel is the
  * stronger claim, and it is the one whose id gets written to `cancelled_by`.
  *
+ * `actingAs: "guest"` is the ONE exception, added 2026-08-27 after this rule
+ * locked a real person out. An owner who is both an admin and a guest holds
+ * both cookies permanently, so the guest "Withdraw request" button — which
+ * sends no reason, because guests are not required to explain themselves —
+ * hit the admin branch and was refused "A cancellation reason is required."
+ * Their own pending request became impossible to withdraw from the guest UI.
+ *
+ * This does NOT weaken the rule above. The body can only ever make a caller
+ * give up admin powers, never claim them: `actingAs: "guest"` routes through
+ * the customer session, and the guest rules still apply in full — ownership
+ * is checked against that session, so it cannot reach anyone else's booking,
+ * and a `booked` stay still cannot be withdrawn. Declining privilege is
+ * always safe; claiming it never is.
+ *
  * Cancellation is immediate and requires no ApprovalVote — see
  * lib/cancellation.ts for why that does not weaken the two-admin rule.
  *
@@ -42,6 +56,14 @@ const bodySchema = z
         `A cancellation reason may be at most ${MAX_CANCELLATION_REASON} characters.`,
       )
       .optional(),
+    /**
+     * Opt out of admin privileges for this call — see the header comment.
+     * A literal, not a boolean or a free string: the only thing anyone may
+     * declare is that they are acting as a guest. There is deliberately no
+     * `actingAs: "admin"`, because that would be claiming privilege from the
+     * body, which this route must never allow.
+     */
+    actingAs: z.literal("guest").optional(),
   })
   // `.strict()` for the same reason PUT /bookings/:id uses it: a caller
   // sending `status` or `cancelled_by` should get a clear 400, not have the
@@ -70,7 +92,12 @@ export async function POST(
   // DEACTIVATED admin to null, which is the behaviour we want — such a caller
   // falls through to the guest rules and can still withdraw their own pending
   // request, but cannot cancel anyone else's stay.
-  const admin = await getOptionalAdmin();
+  //
+  // Skipped entirely when the caller asked to act as a guest, so someone
+  // holding both cookies gets the guest rules they asked for. Safe in one
+  // direction only — see the header comment.
+  const admin =
+    parsed.data.actingAs === "guest" ? null : await getOptionalAdmin();
 
   let actor: CancelActor;
   let reason: string;

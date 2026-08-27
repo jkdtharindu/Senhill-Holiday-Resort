@@ -39,7 +39,13 @@ export function WithdrawButton({ bookingId, itemName }: WithdrawButtonProps) {
       const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        // `actingAs: "guest"` matters for anyone who is BOTH an admin and a
+        // guest — the owner, typically. Their browser holds both cookies, and
+        // without this the route would take the admin branch and refuse this
+        // request for having no reason, making their own booking impossible to
+        // withdraw from here. It only ever gives up privilege, never claims
+        // it; see the cancel route's header comment.
+        body: JSON.stringify({ actingAs: "guest" }),
       });
       const data = (await response.json().catch(() => null)) as {
         error?: string;
