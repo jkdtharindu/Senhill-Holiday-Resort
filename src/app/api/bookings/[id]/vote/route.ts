@@ -65,6 +65,7 @@ export async function POST(
       {
         error: result.error,
         ...("blockedBy" in result ? { blocked_by: result.blockedBy } : {}),
+        ...("advanceAmountMissing" in result ? { advance_amount_missing: true } : {}),
       },
       { status: result.status },
     );

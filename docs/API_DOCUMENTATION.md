@@ -353,6 +353,18 @@ Cast an ApprovalVote. Any signed-in, active admin may vote (no super-admin restr
   ```
   `decline` is **never** blocked this way — declining only frees a date, so there is nothing to
   jump ahead of.
+- **Added 2026-08-28 — advance amount required to approve.** An `approve` vote also returns 409 if
+  the booking has no `advance_amount` recorded yet (owner decision, 2026-08-28) — an admin cannot
+  approve a booking with no advance payment on record:
+  ```json
+  {
+    "error": "Record an advance amount for this booking before approving it.",
+    "advance_amount_missing": true
+  }
+  ```
+  Checked after the approval-queue block above (a competing claim on the same dates is the more
+  structural problem, so it takes priority). `decline` is never blocked by this either. See
+  `src/lib/vote.ts`'s `hasAdvanceAmount` parameter to `decideVoteOutcome`.
 
 Response:
 ```json
@@ -698,6 +710,31 @@ This is **guest-initiated, not automated messaging** — the button only opens W
 draft the guest still has to send themselves, the same relationship a `mailto:` link with a
 pre-filled subject has to actually sending an email. It does not touch `PRD.md` §4's "no
 automatic messaging via SMS/WhatsApp" non-goal, since the app itself sends nothing.
+
+**Added 2026-08-28 — WhatsApp integration extended across the booking lifecycle.** Same
+click-to-chat pattern, four new touch points, all guest- or admin-initiated via `wa.me` links
+(`src/lib/whatsapp-templates.ts`, mirroring `email-templates.ts`'s one-function-per-event shape,
+plain-text only):
+- **Guest → hotel.** `/my-bookings` shows a "WhatsApp (number)" button per `CONTACT_INFO.phones`
+  number on any `reserved` booking (same gate as the withdraw button), pre-filled with the
+  booking's item/dates via `guestContactMessage()`.
+- **Admin → guest, payment reminder.** The admin booking-detail edit form shows "Send payment
+  reminder via WhatsApp" while a booking is `reserved` with no `advance_amount` recorded yet
+  (`paymentReminderMessage()`).
+- **Admin → guest, confirmed.** Once a booking reaches `booked`, the approval panel shows "Notify
+  guest via WhatsApp" (`bookingConfirmedMessage()`).
+- **Admin → guest, cancelled.** The cancellation panel shows "Notify guest via WhatsApp" once a
+  booking is `cancelled`, distinguishing a guest's own withdrawal from an admin cancellation —
+  and, matching `bookingCancelledEmail`'s existing convention, never discloses the internal
+  cancellation reason (`bookingCancelledMessage()`).
+
+The existing compulsory `phone` field is reused as-is for all of this — relabelled "Phone /
+WhatsApp number" in both the guest booking form and the admin edit form, no schema change.
+
+Bundled with this: the new advance-amount-required-to-approve rule documented under
+`POST /bookings/:id/vote` above. As a direct consequence, `bookingApprovedEmail`'s copy changed
+from "if you haven't arranged your advance payment yet..." to a thank-you, since a booking can now
+only ever reach `booked` with the advance amount already on record.
 
 ---
 

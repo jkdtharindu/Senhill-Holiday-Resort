@@ -241,14 +241,14 @@ export function BookingForm({
 
       <TextField
         id="phone"
-        label="Phone number"
+        label="Phone / WhatsApp number"
         type="tel"
         required
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         disabled={submitting}
         autoComplete="tel"
-        hint="How we reach you about this booking. Required."
+        hint="How we reach you about this booking, including via WhatsApp. Required."
       />
 
       <TextField

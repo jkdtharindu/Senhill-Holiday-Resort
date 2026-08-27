@@ -19,18 +19,37 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { cx, TEXT_BODY } from "@/components/ui/styles";
 import type { BookingStatus, PaymentStage } from "@/db/schema";
 import { MAX_CANCELLATION_REASON } from "@/lib/cancellation";
+import { whatsappLink } from "@/lib/contact-info";
+import type { DateOnly } from "@/lib/dates";
+import { bookingCancelledMessage } from "@/lib/whatsapp-templates";
 
 interface CancelPanelProps {
   bookingId: string;
   status: BookingStatus;
   paymentStage: PaymentStage;
+  phone: string;
+  guestName: string;
+  itemName: string;
+  checkIn: DateOnly;
+  checkOut: DateOnly;
+  cancelledByGuestSelf: boolean;
 }
 
-export function CancelPanel({ bookingId, status, paymentStage }: CancelPanelProps) {
+export function CancelPanel({
+  bookingId,
+  status,
+  paymentStage,
+  phone,
+  guestName,
+  itemName,
+  checkIn,
+  checkOut,
+  cancelledByGuestSelf,
+}: CancelPanelProps) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
@@ -71,7 +90,25 @@ export function CancelPanel({ bookingId, status, paymentStage }: CancelPanelProp
   }
 
   if (status === "cancelled") {
-    return <Alert tone="info">This booking is already cancelled.</Alert>;
+    return (
+      <div className="flex flex-col gap-3">
+        <Alert tone="info">This booking is already cancelled.</Alert>
+        <div>
+          <LinkButton
+            href={whatsappLink(
+              phone,
+              bookingCancelledMessage({ guestName, itemName, checkIn, checkOut, cancelledByGuestSelf }),
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="secondary"
+            size="sm"
+          >
+            Notify guest via WhatsApp
+          </LinkButton>
+        </div>
+      </div>
+    );
   }
 
   if (status === "declined") {

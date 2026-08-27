@@ -17,12 +17,19 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/field";
-import type { PaymentStage } from "@/db/schema";
+import type { BookingStatus, PaymentStage } from "@/db/schema";
+import { whatsappLink } from "@/lib/contact-info";
+import type { DateOnly } from "@/lib/dates";
+import { paymentReminderMessage } from "@/lib/whatsapp-templates";
 
 interface BookingEditFormProps {
   bookingId: string;
+  status: BookingStatus;
+  itemName: string;
+  checkIn: DateOnly;
+  checkOut: DateOnly;
   initial: {
     guestName: string;
     phone: string;
@@ -41,7 +48,7 @@ const PAYMENT_STAGES: Array<{ value: PaymentStage; label: string }> = [
   { value: "refunded", label: "Refunded" },
 ];
 
-export function BookingEditForm({ bookingId, initial }: BookingEditFormProps) {
+export function BookingEditForm({ bookingId, status, itemName, checkIn, checkOut, initial }: BookingEditFormProps) {
   const router = useRouter();
 
   const [guestName, setGuestName] = useState(initial.guestName);
@@ -125,7 +132,7 @@ export function BookingEditForm({ bookingId, initial }: BookingEditFormProps) {
         />
         <TextField
           id="edit-phone"
-          label="Phone"
+          label="Phone / WhatsApp number"
           type="tel"
           required
           value={phone}
@@ -144,7 +151,7 @@ export function BookingEditForm({ bookingId, initial }: BookingEditFormProps) {
         disabled={submitting}
       />
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <div id="advance-amount" className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <SelectField
           id="edit-payment-stage"
           label="Payment stage"
@@ -181,6 +188,20 @@ export function BookingEditForm({ bookingId, initial }: BookingEditFormProps) {
           hint="Leave blank to clear."
         />
       </div>
+
+      {status === "reserved" && initial.advanceAmount === null && (
+        <div>
+          <LinkButton
+            href={whatsappLink(phone, paymentReminderMessage({ guestName, itemName, checkIn, checkOut }))}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="secondary"
+            size="sm"
+          >
+            Send payment reminder via WhatsApp
+          </LinkButton>
+        </div>
+      )}
 
       <TextAreaField
         id="edit-internal-notes"

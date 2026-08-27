@@ -28,6 +28,7 @@ import {
   type DateOnly,
 } from "@/lib/dates";
 import { WithdrawButton } from "./withdraw-button";
+import { WhatsAppContactButton } from "./whatsapp-contact-button";
 
 import { CreatedBanner } from "./created-banner";
 
@@ -70,6 +71,7 @@ export default async function MyBookingsPage({
       guestsCount: bookings.guestsCount,
       status: bookings.status,
       createdAt: bookings.createdAt,
+      guestName: bookings.guestName,
     })
     .from(bookings)
     .innerJoin(bookableItems, eq(bookings.bookableItemId, bookableItems.id))
@@ -122,6 +124,7 @@ interface BookingRow {
   checkOut: string;
   guestsCount: number;
   status: BookingStatus;
+  guestName: string;
 }
 
 function BookingGroup({
@@ -217,7 +220,15 @@ function BookingGroup({
                   independently (lib/cancellation.ts).
                 */}
                 {row.status === "reserved" && !muted && (
-                  <WithdrawButton bookingId={row.id} itemName={row.itemName} />
+                  <div className="flex flex-col gap-2">
+                    <WithdrawButton bookingId={row.id} itemName={row.itemName} />
+                    <WhatsAppContactButton
+                      guestName={row.guestName}
+                      itemName={row.itemName}
+                      checkIn={row.checkIn as DateOnly}
+                      checkOut={row.checkOut as DateOnly}
+                    />
+                  </div>
                 )}
               </li>
             );

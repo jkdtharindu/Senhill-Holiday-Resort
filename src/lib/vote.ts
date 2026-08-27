@@ -95,6 +95,10 @@ export type VoteOutcome =
       blocker: CompetingBooking;
     }
   | {
+      action: "rejected";
+      reason: "advance_amount_missing";
+    }
+  | {
       action: "applied";
       previousVote: "approve" | "decline" | null;
       nextStatus: BookingStatus;
@@ -116,6 +120,14 @@ export type VoteOutcome =
  * first. `decline` is never blocked this way — it only frees a date, so
  * there is nothing to jump ahead of.
  *
+ * An `approve` vote is also rejected outright if `hasAdvanceAmount` is false
+ * (owner decision, 2026-08-27) — an admin cannot approve a booking with no
+ * advance payment on record. `decline` is never blocked by this either, for
+ * the same reason as `queueBlocker`. Checked AFTER `queueBlocker`: a
+ * competing claim on the same dates is the more structural problem (it names
+ * a specific other booking to resolve first), so it takes priority over a
+ * payment-process gate that only matters once the queue is otherwise clear.
+ *
  * Otherwise the vote is applied. The next status is computed by projecting
  * what the standing-votes list looks like AFTER this vote overwrites any
  * prior vote from the same admin:
@@ -129,6 +141,7 @@ export function decideVoteOutcome(
   standingVotes: readonly StandingVote[],
   newVote: { adminId: string; vote: "approve" | "decline" },
   queueBlocker: CompetingBooking | null = null,
+  hasAdvanceAmount: boolean = true,
 ): VoteOutcome {
   if (currentStatus !== "reserved") {
     return { action: "rejected", reason: "booking_already_resolved", currentStatus };
@@ -136,6 +149,10 @@ export function decideVoteOutcome(
 
   if (newVote.vote === "approve" && queueBlocker !== null) {
     return { action: "rejected", reason: "earlier_claim_pending", blocker: queueBlocker };
+  }
+
+  if (newVote.vote === "approve" && !hasAdvanceAmount) {
+    return { action: "rejected", reason: "advance_amount_missing" };
   }
 
   const previousVote = standingVotes.find((v) => v.adminId === newVote.adminId)?.vote ?? null;

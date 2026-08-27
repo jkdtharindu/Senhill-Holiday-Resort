@@ -300,3 +300,69 @@ describe("decideVoteOutcome — approval queue blocking", () => {
     });
   });
 });
+
+describe("decideVoteOutcome — advance amount required to approve", () => {
+  const BLOCKER: CompetingBooking = {
+    id: "earlier-booking",
+    guestName: "Earlier Guest",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    advancePaidDate: null,
+  };
+
+  it("an approve is rejected when hasAdvanceAmount is false", () => {
+    const outcome = decideVoteOutcome(
+      "reserved",
+      [],
+      { adminId: ALICE, vote: "approve" },
+      null,
+      false,
+    );
+    assert.deepEqual(outcome, { action: "rejected", reason: "advance_amount_missing" });
+  });
+
+  it("a decline is NEVER blocked by missing advance amount", () => {
+    const outcome = decideVoteOutcome(
+      "reserved",
+      [],
+      { adminId: ALICE, vote: "decline" },
+      null,
+      false,
+    );
+    assert.equal(outcome.action, "applied");
+  });
+
+  it("an approve proceeds normally when hasAdvanceAmount is true (the default)", () => {
+    const outcome = decideVoteOutcome("reserved", [], { adminId: ALICE, vote: "approve" });
+    assert.equal(outcome.action, "applied");
+  });
+
+  it("the already-resolved check still takes priority over missing advance amount", () => {
+    const outcome = decideVoteOutcome(
+      "booked",
+      [],
+      { adminId: ALICE, vote: "approve" },
+      null,
+      false,
+    );
+    assert.deepEqual(outcome, {
+      action: "rejected",
+      reason: "booking_already_resolved",
+      currentStatus: "booked",
+    });
+  });
+
+  it("the queueBlocker check still takes priority over missing advance amount", () => {
+    const outcome = decideVoteOutcome(
+      "reserved",
+      [],
+      { adminId: ALICE, vote: "approve" },
+      BLOCKER,
+      false,
+    );
+    assert.deepEqual(outcome, {
+      action: "rejected",
+      reason: "earlier_claim_pending",
+      blocker: BLOCKER,
+    });
+  });
+});
