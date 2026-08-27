@@ -186,7 +186,7 @@ export default async function AdminDashboardPage() {
         description={
           emailsSentToday === null
             ? "Today's total could not be read — the entries below may be incomplete."
-            : `${emailsSentToday} recipient${emailsSentToday === 1 ? "" : "s"} emailed today, of a ${DAILY_SEND_LIMIT} daily safety limit.`
+            : `${emailsSentToday} recipient${emailsSentToday === 1 ? "" : "s"} emailed today, against a daily safety limit of ${DAILY_SEND_LIMIT}.`
         }
       >
         <RecentEmailTable rows={recentEmails} />
