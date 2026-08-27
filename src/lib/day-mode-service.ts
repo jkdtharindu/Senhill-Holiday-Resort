@@ -14,7 +14,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bookableItems, bookings, dayModes, type DayModeKind } from "@/db/schema";
 import type { DateOnly } from "./dates";
-import { planDayModeChanges, type ActiveBookingRange } from "./day-mode";
+import { planDayModeChanges, planDayModeClearings, type ActiveBookingRange } from "./day-mode";
 
 /** Active bookings joined to their item's kind, for the switch-block check. */
 export async function loadActiveBookingRanges(): Promise<ActiveBookingRange[]> {
@@ -92,6 +92,54 @@ export async function applyDayModePlan(
           updatedAt: sql`now()`,
         },
       });
+  }
+
+  return { updated, blocked };
+}
+
+/**
+ * Clear (unset) DayMode records for a set of dates, closing those dates to bookings.
+ *
+ * Similar to applyDayModePlan but for deletion: checks for active bookings and
+ * reports which dates were cleared, which were blocked, and which were already unset.
+ */
+export async function clearDayModePlan(
+  dates: DateOnly[],
+  adminId: string,
+): Promise<DayModePlanResult> {
+  if (dates.length === 0) {
+    return { updated: [], blocked: [] };
+  }
+
+  const existingRows = await db
+    .select({ date: dayModes.date, mode: dayModes.mode })
+    .from(dayModes)
+    .where(inArray(dayModes.date, dates));
+
+  const existingModes = new Map(existingRows.map((r) => [r.date, r.mode]));
+  const activeBookings = await loadActiveBookingRanges();
+
+  const outcomes = planDayModeClearings(dates, existingModes, activeBookings);
+
+  const toDelete = outcomes.filter((o) => o.action === "delete");
+  const updated: DateOnly[] = [];
+  const blocked: { date: DateOnly; reason: string }[] = [];
+
+  for (const outcome of outcomes) {
+    if (outcome.action === "blocked") {
+      blocked.push({ date: outcome.date, reason: outcome.reason });
+    } else if (outcome.action === "delete") {
+      updated.push(outcome.date);
+    } else if (outcome.action === "noop") {
+      // Already unset, so from the caller's perspective it's now in the desired state
+      updated.push(outcome.date);
+    }
+  }
+
+  if (toDelete.length > 0) {
+    await db
+      .delete(dayModes)
+      .where(inArray(dayModes.date, toDelete.map((o) => o.date)));
   }
 
   return { updated, blocked };

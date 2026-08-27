@@ -23,7 +23,7 @@ import { db } from "@/db";
 import { dayModes } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { isValidDateOnly, type DateOnly } from "@/lib/dates";
-import { applyDayModePlan } from "@/lib/day-mode-service";
+import { applyDayModePlan, clearDayModePlan } from "@/lib/day-mode-service";
 import { MAX_EXPLICIT_DATES, normalizeDates } from "@/lib/day-mode";
 
 const putSchema = z.object({
@@ -116,4 +116,47 @@ export async function GET(request: NextRequest): Promise<Response> {
     .orderBy(asc(dayModes.date));
 
   return Response.json({ dayModes: rows });
+}
+
+const deleteSchema = z.object({
+  dates: z
+    .array(z.string())
+    .min(1, "Provide at least one date.")
+    .max(
+      MAX_EXPLICIT_DATES,
+      `No more than ${MAX_EXPLICIT_DATES} dates in a single request — split it up.`,
+    ),
+});
+
+export async function DELETE(request: NextRequest): Promise<Response> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Expected a JSON body." }, { status: 400 });
+  }
+
+  const parsed = deleteSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Provide `dates` as a non-empty array of dates in YYYY-MM-DD format." },
+      { status: 400 },
+    );
+  }
+
+  const invalidDate = parsed.data.dates.find((d) => !isValidDateOnly(d));
+  if (invalidDate !== undefined) {
+    return Response.json(
+      { error: `"${invalidDate}" is not a valid date. Use YYYY-MM-DD.` },
+      { status: 400 },
+    );
+  }
+
+  const dates = normalizeDates(parsed.data.dates as DateOnly[]);
+  const result = await clearDayModePlan(dates, auth.admin.id);
+
+  return Response.json(result);
 }

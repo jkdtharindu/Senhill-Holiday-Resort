@@ -82,9 +82,12 @@ function ResultAlert({ result }: { result: DayModeResponse }) {
   );
 }
 
-const MODES: Array<{ value: DayModeKind; label: string }> = [
+type ModeOption = DayModeKind | "clear";
+
+const MODES: Array<{ value: ModeOption; label: string }> = [
   { value: "room_mode", label: "Room mode — rooms let individually" },
   { value: "villa_mode", label: "Villa mode — whole property as one" },
+  { value: "clear", label: "Clear mode — close to bookings" },
 ];
 
 /** Largest explicit date list the endpoint accepts (MAX_EXPLICIT_DATES). */
@@ -101,7 +104,7 @@ export function DayModeControls({
 
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
-  const [mode, setMode] = useState<DayModeKind>("room_mode");
+  const [mode, setMode] = useState<ModeOption>("room_mode");
   const [scope, setScope] = useState<"all" | "weekends">("all");
 
   const [busy, setBusy] = useState(false);
@@ -119,12 +122,27 @@ export function DayModeControls({
     }
 
     let url: string;
+    let method: string;
     let body: unknown;
 
-    if (scope === "weekends") {
+    if (mode === "clear") {
+      // Clearing mode doesn't support the bulk/pattern approach — always explicit dates
+      const dates = datesInclusive(rangeFrom, rangeTo);
+      if (dates.length > MAX_EXPLICIT_DATES) {
+        setError(
+          `That range covers ${dates.length} days — more than the ${MAX_EXPLICIT_DATES} a single request allows. Split it up.`,
+        );
+        return;
+      }
+      method = "DELETE";
+      url = "/api/calendar/day-mode";
+      body = { dates };
+    } else if (scope === "weekends") {
+      method = "PUT";
       url = "/api/calendar/day-mode/bulk";
       body = { from: rangeFrom, to: rangeTo, pattern: "weekends", mode };
     } else {
+      method = "PUT";
       const dates = datesInclusive(rangeFrom, rangeTo);
       if (dates.length > MAX_EXPLICIT_DATES) {
         setError(
@@ -139,14 +157,15 @@ export function DayModeControls({
     setBusy(true);
     try {
       const response = await fetch(url, {
-        method: "PUT",
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = (await response.json().catch(() => null)) as DayModeResponse | null;
 
       if (!response.ok) {
-        setError(data?.error ?? "Could not set the mode. Please try again.");
+        const action = mode === "clear" ? "clear the mode" : "set the mode";
+        setError(data?.error ?? `Could not ${action}. Please try again.`);
         setBusy(false);
         return;
       }
@@ -196,7 +215,8 @@ export function DayModeControls({
             label="Which days in that range"
             value={scope}
             onChange={(e) => setScope(e.target.value as "all" | "weekends")}
-            disabled={busy}
+            disabled={busy || mode === "clear"}
+            hint={mode === "clear" ? "Clearing mode uses every day only" : undefined}
           >
             <option value="all">Every day</option>
             <option value="weekends">Weekends only</option>
@@ -206,7 +226,7 @@ export function DayModeControls({
             id="dm-mode"
             label="Set to"
             value={mode}
-            onChange={(e) => setMode(e.target.value as DayModeKind)}
+            onChange={(e) => setMode(e.target.value as ModeOption)}
             disabled={busy}
           >
             {MODES.map((m) => (
@@ -218,14 +238,16 @@ export function DayModeControls({
         </div>
 
         <Button type="submit" disabled={busy} className="self-start">
-          {busy ? "Applying…" : "Apply"}
+          {busy ? (mode === "clear" ? "Clearing…" : "Applying…") : mode === "clear" ? "Clear" : "Apply"}
         </Button>
       </form>
 
       <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-500">
         Dates you never set stay closed to bookings — there is no default mode.
         Opening a date is a deliberate act, so an unset date can never be sold
-        by accident.
+        by accident. Use "Clear mode" to close previously open dates (e.g., for
+        renovations or special closures) — if no active bookings conflict, the
+        dates will revert to closed.
       </p>
     </div>
   );

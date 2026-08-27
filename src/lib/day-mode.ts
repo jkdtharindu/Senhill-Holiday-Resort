@@ -136,6 +136,7 @@ export type DayModeOutcome =
   | { date: DateOnly; action: "noop" }
   | { date: DateOnly; action: "insert" }
   | { date: DateOnly; action: "switch"; from: DayModeKind }
+  | { date: DateOnly; action: "delete" }
   | { date: DateOnly; action: "blocked"; reason: string };
 
 /**
@@ -176,6 +177,36 @@ export function planDayModeChanges(
     }
 
     return { date, action: "switch", from: current };
+  });
+}
+
+/**
+ * Decide the outcome for every date when unsetting a day mode.
+ *
+ * Similar to planDayModeChanges but for deletion: dates with active bookings
+ * cannot be unset because the mode determines what can be booked on that date.
+ */
+export function planDayModeClearings(
+  dates: readonly DateOnly[],
+  existingModes: ReadonlyMap<DateOnly, DayModeKind>,
+  activeBookings: readonly ActiveBookingRange[],
+): DayModeOutcome[] {
+  return dates.map((date) => {
+    const current = existingModes.get(date);
+
+    if (current === undefined) {
+      return { date, action: "noop" };
+    }
+
+    if (dateHasActiveBooking(date, current, activeBookings)) {
+      return {
+        date,
+        action: "blocked",
+        reason: "Existing booking under current mode",
+      };
+    }
+
+    return { date, action: "delete" };
   });
 }
 
