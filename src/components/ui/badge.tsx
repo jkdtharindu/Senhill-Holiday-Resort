@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 
 import type { BookingStatus, CalendarState, PaymentStage, RoomStatus } from "@/db/schema";
+import type { EmailEvent, EmailOutcome } from "@/lib/email-log";
 import { cx } from "./styles";
 
 export type BadgeTone = "neutral" | "open" | "pending" | "closed" | "info";
@@ -101,6 +102,39 @@ export function BookingStatusBadge({
       {audience === "guest" ? "Awaiting confirmation" : "Reserved"}
     </Badge>
   );
+}
+
+/**
+ * What happened to one email send attempt.
+ *
+ * `Not configured` reads neutral rather than red on purpose: it is the
+ * expected state on a preview deploy with no API key, and colouring it as a
+ * failure would train an admin to ignore the colour that actually means a
+ * provider rejected something.
+ */
+const EMAIL_OUTCOME: Record<EmailOutcome, { label: string; tone: BadgeTone }> = {
+  sent: { label: "Sent", tone: "open" },
+  failed: { label: "Failed", tone: "closed" },
+  skipped_no_api_key: { label: "Not configured", tone: "neutral" },
+  blocked_daily_limit: { label: "Blocked — daily limit", tone: "pending" },
+};
+
+export function EmailOutcomeBadge({ outcome }: { outcome: EmailOutcome }) {
+  const meta = EMAIL_OUTCOME[outcome];
+  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+}
+
+/** Human label for an email event type. */
+const EMAIL_EVENT_LABELS: Record<EmailEvent, string> = {
+  booking_confirmation: "Booking confirmation",
+  admin_new_booking_alert: "New booking alert",
+  booking_approved: "Booking approved",
+  booking_declined: "Booking declined",
+  booking_cancelled: "Booking cancelled",
+};
+
+export function emailEventLabel(event: EmailEvent): string {
+  return EMAIL_EVENT_LABELS[event];
 }
 
 const PAYMENT_STAGE: Record<PaymentStage, { label: string; tone: BadgeTone }> = {

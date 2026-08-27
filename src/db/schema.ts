@@ -61,6 +61,26 @@ export const paymentStage = pgEnum("payment_stage", [
 ]);
 export const voteKind = pgEnum("vote_kind", ["approve", "decline"]);
 
+/**
+ * Email enums mirror the constants in lib/email-log.ts exactly. That file is
+ * the pure, testable definition; these are the database's copy. Adding a
+ * value means changing both — deliberately, since a new email event needs a
+ * migration anyway.
+ */
+export const emailEvent = pgEnum("email_event", [
+  "booking_confirmation",
+  "admin_new_booking_alert",
+  "booking_approved",
+  "booking_declined",
+  "booking_cancelled",
+]);
+export const emailOutcome = pgEnum("email_outcome", [
+  "sent",
+  "failed",
+  "skipped_no_api_key",
+  "blocked_daily_limit",
+]);
+
 /* -------------------------------------------------------------- customers */
 
 export const customers = pgTable("customers", {
@@ -353,6 +373,66 @@ export const bookingAuditLog = pgTable(
   (t) => [index("booking_audit_log_booking_idx").on(t.bookingId, t.changedAt)],
 );
 
+/* ---------------------------------------------------------------- email_log */
+
+/**
+ * One row per email send ATTEMPT — including the ones that never left.
+ *
+ * Added 2026-08-27 after the email feature spent hours sending nothing in
+ * production with no signal anywhere (see MEMORY.md). `sendEmail` swallows
+ * its own errors so mail can never break a booking, which is right; this
+ * table is what makes that silence observable instead of invisible.
+ *
+ * Attempts, not deliveries. A `sent` row means the provider ACCEPTED the
+ * message, not that it reached an inbox — a later bounce is not recorded
+ * here, and would need Resend's webhooks to capture. Do not read this table
+ * as proof of delivery.
+ *
+ * `sent_on` is the resort-local calendar date, stored alongside the exact
+ * `sent_at` timestamp rather than derived from it at query time. Two
+ * reasons: the daily counter must agree with what an admin means by "today"
+ * in Asia/Colombo (a UTC day boundary would disagree for part of every
+ * evening), and an indexed date equality beats a timezone conversion per row
+ * on every send.
+ */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    event: emailEvent("event").notNull(),
+    outcome: emailOutcome("outcome").notNull(),
+    /** Comma-joined; the admin alert legitimately goes to several people. */
+    recipients: text("recipients").notNull(),
+    /**
+     * Deliveries, not rows. The volume breaker sums this rather than counting
+     * rows, because one alert to three admins is three deliveries against any
+     * provider quota.
+     */
+    recipientCount: integer("recipient_count").notNull(),
+    subject: text("subject").notNull(),
+    /** Provider or transport error, when `outcome` is `failed`. */
+    errorMessage: text("error_message"),
+    /**
+     * Nullable and NOT cascade-deleted: the record that we emailed someone
+     * should outlive the booking row it was about. A future non-booking
+     * email (an admin volume alert, say) has no booking at all.
+     */
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    sentOn: date("sent_on").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("email_log_recipient_count_positive", sql`${t.recipientCount} > 0`),
+    // The daily-volume query runs before every single send, so it is the one
+    // read path worth indexing deliberately.
+    index("email_log_sent_on_idx").on(t.sentOn),
+    index("email_log_outcome_idx").on(t.outcome, t.sentAt),
+    index("email_log_booking_idx").on(t.bookingId),
+  ],
+);
+
 /* ------------------------------------------------------------------ types */
 
 export type Customer = typeof customers.$inferSelect;
@@ -371,6 +451,7 @@ export type PaymentStage = (typeof paymentStage.enumValues)[number];
 export type ApprovalVote = typeof approvalVotes.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type BookingAuditLog = typeof bookingAuditLog.$inferSelect;
+export type EmailLog = typeof emailLog.$inferSelect;
 
 /** The 4 CalendarState values shown on the month view. Derived, never stored. */
 export type CalendarState = "unavailable" | "open" | "reserved" | "booked";

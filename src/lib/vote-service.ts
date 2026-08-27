@@ -210,6 +210,7 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
     // commits.
     if (outcome.statusChanged && (outcome.nextStatus === "booked" || outcome.nextStatus === "declined")) {
       notification = {
+        bookingId: booking.id,
         bookableItemId: booking.bookableItemId,
         guestName: booking.guestName,
         email: booking.email,
@@ -245,6 +246,7 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
 }
 
 interface VoteResolvedNotification {
+  bookingId: string;
   bookableItemId: string;
   guestName: string;
   email: string;
@@ -278,5 +280,7 @@ async function notifyVoteResolved(input: VoteResolvedNotification): Promise<void
     subject: content.subject,
     html: content.html,
     text: content.text,
+    event: input.nextStatus === "booked" ? "booking_approved" : "booking_declined",
+    bookingId: input.bookingId,
   });
 }

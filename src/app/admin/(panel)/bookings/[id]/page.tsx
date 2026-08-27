@@ -23,7 +23,7 @@ import { CardPanel, DescriptionList, PageHeader, PageShell } from "@/components/
 import { BORDER, cx, TEXT_BODY, TEXT_HEADING, TEXT_MUTED } from "@/components/ui/styles";
 import { fetchAdminBooking } from "@/lib/admin-bookings-service";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { formatDateForDisplay, nightsOfStay } from "@/lib/dates";
+import { formatDateForDisplay, formatMoment, nightsOfStay } from "@/lib/dates";
 import { BookingEditForm } from "./booking-edit-form";
 import { CancelPanel } from "./cancel-panel";
 import { VotePanel } from "./vote-panel";
@@ -52,13 +52,6 @@ function fieldLabel(field: string): string {
 }
 
 /** Timestamps are shown in resort time — the timezone every date here means. */
-function formatMoment(value: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Colombo",
-  }).format(value);
-}
 
 export default async function AdminBookingDetailPage({
   params,

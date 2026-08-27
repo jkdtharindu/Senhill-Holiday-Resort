@@ -158,6 +158,7 @@ export async function cancelBooking(
     ]);
 
     notification = {
+      bookingId: booking.id,
       bookableItemId: booking.bookableItemId,
       guestName: booking.guestName,
       email: booking.email,
@@ -197,6 +198,7 @@ export async function cancelBooking(
 }
 
 interface CancellationNotification {
+  bookingId: string;
   bookableItemId: string;
   guestName: string;
   email: string;
@@ -228,5 +230,7 @@ async function notifyBookingCancelled(input: CancellationNotification): Promise<
     subject: content.subject,
     html: content.html,
     text: content.text,
+    event: "booking_cancelled",
+    bookingId: input.bookingId,
   });
 }

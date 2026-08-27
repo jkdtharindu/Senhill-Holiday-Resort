@@ -15,7 +15,12 @@ import { count, eq } from "drizzle-orm";
 
 import { LinkButton } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { BookingStatusBadge, PaymentStageBadge } from "@/components/ui/badge";
+import {
+  BookingStatusBadge,
+  EmailOutcomeBadge,
+  emailEventLabel,
+  PaymentStageBadge,
+} from "@/components/ui/badge";
 import { CardPanel, EmptyState, PageHeader, PageShell } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/table";
 import { cx, TEXT_BODY, TEXT_HEADING, TEXT_MUTED } from "@/components/ui/styles";
@@ -26,7 +31,19 @@ import {
   type AdminBookingListItem,
 } from "@/lib/admin-bookings-service";
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { formatDateForDisplay, nightsOfStay, todayAtResort } from "@/lib/dates";
+import {
+  formatDateForDisplay,
+  formatMoment,
+  nightsOfStay,
+  todayAtResort,
+} from "@/lib/dates";
+import { DAILY_SEND_LIMIT, volumeLevel } from "@/lib/email-log";
+import {
+  countFailuresToday,
+  countRecipientsSentToday,
+  fetchRecentEmailLog,
+  type EmailLogEntry,
+} from "@/lib/email-log-service";
 
 export const metadata: Metadata = {
   title: "Admin",
@@ -42,26 +59,40 @@ export default async function AdminDashboardPage() {
 
   const today = todayAtResort();
 
-  const [[{ activeAdmins }], [{ awaitingApproval }], upcomingBookings] =
-    await Promise.all([
-      db
-        .select({ activeAdmins: count() })
-        .from(adminUsers)
-        .where(eq(adminUsers.active, true)),
-      db
-        .select({ awaitingApproval: count() })
-        .from(bookings)
-        .where(eq(bookings.status, "reserved")),
-      // The list itself, not a separate count — the "Upcoming stays" table
-      // below is built from the same fetch, so the stat tile and the table
-      // can never disagree about how many there are.
-      fetchUpcomingBookings(today),
-    ]);
+  const [
+    [{ activeAdmins }],
+    [{ awaitingApproval }],
+    upcomingBookings,
+    emailsSentToday,
+    emailFailuresToday,
+    recentEmails,
+  ] = await Promise.all([
+    db
+      .select({ activeAdmins: count() })
+      .from(adminUsers)
+      .where(eq(adminUsers.active, true)),
+    db
+      .select({ awaitingApproval: count() })
+      .from(bookings)
+      .where(eq(bookings.status, "reserved")),
+    // The list itself, not a separate count — the "Upcoming stays" table
+    // below is built from the same fetch, so the stat tile and the table
+    // can never disagree about how many there are.
+    fetchUpcomingBookings(today),
+    countRecipientsSentToday(),
+    countFailuresToday(),
+    fetchRecentEmailLog(8),
+  ]);
 
   // Two different admins must approve before a booking is confirmed, so a
   // single-admin team cannot confirm anything at all. Worth saying plainly
   // rather than letting it be discovered when the first booking gets stuck.
   const canConfirmBookings = activeAdmins >= 2;
+
+  // `null` means the count could not be read at all (see
+  // countRecipientsSentToday) — distinct from a genuine zero, and shown as
+  // "unknown" rather than quietly rendering 0 and implying all is well.
+  const emailLevel = emailsSentToday === null ? null : volumeLevel(emailsSentToday);
 
   const stats: Array<{ label: string; value: number; href: string }> = [
     { label: "Awaiting approval", value: awaitingApproval, href: "/admin/bookings?status=reserved" },
@@ -88,6 +119,34 @@ export default async function AdminDashboardPage() {
           yours is currently the only active account. Until a second admin
           exists, guests can request a stay but nothing can move from requested
           to confirmed.
+        </Alert>
+      )}
+
+      {emailLevel === "at_limit" && (
+        <Alert tone="error" title="Email sending has stopped for today">
+          {emailsSentToday} recipients have been emailed today, hitting the{" "}
+          {DAILY_SEND_LIMIT} safety limit. No further email will go out until
+          tomorrow — guests will not receive booking confirmations in the
+          meantime. This limit is far above normal traffic for this property,
+          so treat it as a sign of a fault or unusual activity rather than a
+          busy day.
+        </Alert>
+      )}
+
+      {emailLevel === "elevated" && (
+        <Alert tone="warning" title="Unusually high email volume today">
+          {emailsSentToday} recipients emailed today, against a safety limit of{" "}
+          {DAILY_SEND_LIMIT}. A normal day here is single digits, so this is
+          worth a look — check the recent sends below for anything repeating.
+        </Alert>
+      )}
+
+      {emailFailuresToday > 0 && (
+        <Alert tone="warning" title={`${emailFailuresToday} email${emailFailuresToday === 1 ? "" : "s"} failed today`}>
+          The mail provider rejected {emailFailuresToday === 1 ? "an email" : "these emails"}, so
+          the intended recipient did not receive{" "}
+          {emailFailuresToday === 1 ? "it" : "them"}. See the reasons under
+          recent email activity below — a guest may need contacting directly.
         </Alert>
       )}
 
@@ -122,6 +181,21 @@ export default async function AdminDashboardPage() {
         </CardPanel>
       </div>
 
+      <CardPanel
+        title="Recent email activity"
+        description={
+          emailsSentToday === null
+            ? "Today's total could not be read — the entries below may be incomplete."
+            : `${emailsSentToday} recipient${emailsSentToday === 1 ? "" : "s"} emailed today, of a ${DAILY_SEND_LIMIT} daily safety limit.`
+        }
+      >
+        <RecentEmailTable rows={recentEmails} />
+        <p className={cx("mt-3 text-xs leading-relaxed", TEXT_MUTED)}>
+          &ldquo;Sent&rdquo; means the mail provider accepted the message, not
+          that it reached an inbox — a later bounce is not recorded here.
+        </p>
+      </CardPanel>
+
       <CardPanel title="How approval works">
         <p className={cx("text-sm leading-relaxed", TEXT_BODY)}>
           A guest&apos;s request arrives as <strong>Reserved</strong>. Two
@@ -132,6 +206,67 @@ export default async function AdminDashboardPage() {
         </p>
       </CardPanel>
     </PageShell>
+  );
+}
+
+/**
+ * Recent email attempts, newest first.
+ *
+ * Exists because `sendEmail` swallows its own errors by design, so without a
+ * visible record a total mail outage looks identical to a quiet day — which
+ * is exactly what happened on 2026-08-27 (see MEMORY.md). Failures show their
+ * reason inline rather than behind a click: the whole point is that nobody
+ * should have to go looking to find out something broke.
+ */
+function RecentEmailTable({ rows }: { rows: EmailLogEntry[] }) {
+  return (
+    <DataTable<EmailLogEntry>
+      caption={`Recent email attempts, ${rows.length} row${rows.length === 1 ? "" : "s"}`}
+      rows={rows}
+      rowKey={(row) => row.id}
+      empty={
+        <EmptyState
+          title="No email sent yet"
+          description="Booking confirmations, approval notices and cancellation emails will be listed here as they go out."
+        />
+      }
+      columns={[
+        {
+          key: "event",
+          header: "Email",
+          cell: (row) => (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">{emailEventLabel(row.event)}</span>
+              <span className={cx("text-xs", TEXT_MUTED)}>{row.recipients}</span>
+            </div>
+          ),
+        },
+        {
+          key: "outcome",
+          header: "Outcome",
+          cell: (row) => (
+            <div className="flex flex-col items-start gap-1">
+              <EmailOutcomeBadge outcome={row.outcome} />
+              {row.errorMessage !== null && (
+                <span className="text-xs text-rose-700 dark:text-rose-400">
+                  {row.errorMessage}
+                </span>
+              )}
+            </div>
+          ),
+        },
+        {
+          key: "sentAt",
+          header: "When",
+          hideOnMobile: true,
+          cell: (row) => (
+            <span className={cx("text-xs whitespace-nowrap", TEXT_MUTED)}>
+              {formatMoment(row.sentAt)}
+            </span>
+          ),
+        },
+      ]}
+    />
   );
 }
 

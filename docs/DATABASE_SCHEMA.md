@@ -117,6 +117,39 @@ field add.)*
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 
+## `email_log`
+*(Added 2026-08-27. One row per email send **attempt**, including attempts that never left.)*
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| event | text | `booking_confirmation` \| `admin_new_booking_alert` \| `booking_approved` \| `booking_declined` \| `booking_cancelled` — mirrors `EMAIL_EVENTS` in `src/lib/email-log.ts` |
+| outcome | text | `sent` \| `failed` \| `skipped_no_api_key` \| `blocked_daily_limit` |
+| recipients | text | comma-joined; the admin alert legitimately goes to several people |
+| recipient_count | integer | deliveries, not rows — the volume breaker sums this, since one alert to three admins is three deliveries against a provider quota. Check constraint: `> 0` |
+| subject | text | |
+| error_message | text | nullable; the provider/transport error when `outcome = failed` |
+| booking_id | uuid | FK → bookings, nullable, **`ON DELETE SET NULL`** — the record that we emailed someone should outlive the booking row it was about |
+| sent_on | date | resort-local (Asia/Colombo) calendar date, stored rather than derived — see below |
+| sent_at | timestamptz | exact moment |
+
+**`sent_on` is stored, not derived, on purpose.** The daily volume counter must agree with what
+an admin means by "today" in Asia/Colombo — a UTC day boundary would disagree for part of every
+evening — and an indexed date equality beats a per-row timezone conversion on a query that runs
+before every single send.
+
+**Attempts, not deliveries.** `outcome = sent` means the provider *accepted* the message, not
+that it reached an inbox. A later bounce is not recorded here and would need Resend's webhooks to
+capture. Do not read this table as proof of delivery.
+
+**Why it exists.** `sendEmail` swallows its own errors by design so mail can never break a
+booking. That is correct, and it is also why a total mail outage produced no visible signal for
+hours on 2026-08-27 (see `MEMORY.md`). This table is what makes that silence observable.
+
+---
+
+## `bookings` — date semantics
+
 **Date semantics (confirmed — do not reinterpret):**
 - `check_in`/`check_out` follow the hotel standard: the stay occupies the nights from `check_in`
   up to **but not including** `check_out`. A 10th→13th booking occupies the 10th, 11th and 12th;

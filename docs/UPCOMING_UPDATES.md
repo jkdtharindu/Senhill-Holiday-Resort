@@ -82,6 +82,19 @@
   - See `docs/API_DOCUMENTATION.md`'s "Email Notifications" section for the full mechanism.
   - Status: ✅ Live on main branch
 
+- [x] **Email send log + volume circuit breaker** (2026-08-27)
+  - Completed: `email_log` table recording every send attempt (including ones that never leave),
+    a hard circuit breaker at 80 recipients/resort-local-day, a dashboard warning from 30/day,
+    and an admin "Recent email activity" panel showing failures with their reasons inline.
+  - Why: `sendEmail` swallows its own errors by design so mail can't break a booking — which is
+    also why the 2026-08-27 outage produced no signal for hours. This makes that silence visible.
+  - Files: new `src/lib/email-log.ts` (pure, 12 tests), `src/lib/email-log-service.ts`,
+    `drizzle/0003_email_log.sql`, plus `email.ts`, `badge.tsx` and the admin dashboard
+  - Migration applied to the live database with owner approval; verified end-to-end with a real
+    send, not just a green build.
+  - Not built: delivery confirmation (needs Resend webhooks), retries, push alerting.
+  - Status: ✅ Live on main branch
+
 - [x] **Contact page** (2026-08-27)
   - Completed: public `/contact` with phone numbers, email addresses, and a map to the property,
     plus a notice asking guests to call ahead and confirm the final approach road — guards

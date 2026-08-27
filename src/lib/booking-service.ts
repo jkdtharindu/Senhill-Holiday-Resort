@@ -209,6 +209,8 @@ async function notifyBookingCreated(booking: Booking): Promise<void> {
     subject: confirmation.subject,
     html: confirmation.html,
     text: confirmation.text,
+    event: "booking_confirmation",
+    bookingId: booking.id,
   });
 
   const adminEmails = await getActiveAdminEmails();
@@ -226,5 +228,7 @@ async function notifyBookingCreated(booking: Booking): Promise<void> {
     html: alert.html,
     text: alert.text,
     replyTo: booking.email,
+    event: "admin_new_booking_alert",
+    bookingId: booking.id,
   });
 }

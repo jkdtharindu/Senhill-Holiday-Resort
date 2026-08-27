@@ -555,12 +555,38 @@ trade-off discussion (SMS/WhatsApp still out of scope, no guest-configurable pre
 > email today — it is *not* capped at one. This was misread once during the 2026-08-27 build and
 > briefly mistaken for an account restriction; the plan limits are the published ones above.
 
-**Volume monitoring — not built.** There is currently no record of send attempts anywhere, so
-neither "how many went out today" nor "did any fail" is answerable without adding instrumentation.
-An `email_log` table was discussed on 2026-08-27 (owner asked about alerting on unusual daily
-volume) and would close both gaps at once. Worth noting for scale: at 3 rooms + a villa, 100 emails
-in one day is not achievable by legitimate bookings — such a spike would indicate a bug or abuse,
-so a useful alert threshold sits far below the plan cap (~30–50/day), not at it.
+**Volume monitoring and the send log — built 2026-08-27.** Every send attempt writes one row to
+`email_log` (see `DATABASE_SCHEMA.md`), including attempts that never reach the network. This is
+what makes a mail outage visible, given `sendEmail` deliberately swallows its own errors.
+
+Two thresholds, defined in `src/lib/email-log.ts` and covered by unit tests at both boundaries:
+
+| Constant | Value | Effect |
+|---|---|---|
+| `DAILY_WARN_THRESHOLD` | 30 recipients | Admin dashboard shows an "unusually high volume" warning |
+| `DAILY_SEND_LIMIT` | 80 recipients | **Circuit breaker** — `sendEmail` refuses to send for the rest of the resort-local day |
+
+Sized against real capacity rather than the mail plan: 3 rooms plus a villa at ~2 emails per
+booking makes a busy legitimate day single digits, so 30 is already far outside normal. The hard
+limit sits below Resend's own 100/day so there is headroom to send by hand while investigating,
+and slack for a multi-recipient send counting as more than one against the provider's quota.
+
+Three behaviours worth knowing before changing any of this:
+
+- **The breaker fails OPEN.** If the daily count cannot be read (database hiccup),
+  `countRecipientsSentToday()` returns `null` and the send proceeds. A transient database error
+  silently suppressing a real guest's booking confirmation is a worse failure than briefly
+  overshooting a self-imposed limit that already sits under the provider's.
+- **Blocked attempts do not count toward the total.** Only `sent` and `failed` consume quota and
+  are summed. Counting blocked attempts would make the breaker self-latching — once tripped it
+  could never untrip, even at midnight.
+- **The breaker cannot prioritise.** It has no way to tell a guest confirmation from a runaway
+  loop and will block both alike. That bluntness is deliberate: at these volumes, crossing the
+  line means something is wrong, and stopping is the safe failure.
+
+**Still not covered:** delivery confirmation (a `sent` row means accepted, not delivered — bounces
+would need Resend webhooks), retries, and any alerting that reaches someone not looking at the
+dashboard. See `MAINTENANCE.md` §5.
 
 **Templates as a starting point, not a final admin-editable system.** The owner asked for these
 to remain editable "as templates for the future" — today that means editing the plain functions in

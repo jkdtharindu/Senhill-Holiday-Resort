@@ -256,3 +256,21 @@ const longDateFormatter = new Intl.DateTimeFormat("en-GB", {
 export function formatDateForDisplay(d: DateOnly): string {
   return longDateFormatter.format(toUtcMidnight(d));
 }
+
+const momentFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: RESORT_TIMEZONE,
+});
+
+/**
+ * An exact instant rendered in resort time, e.g. "14 Sep 2026, 09:14".
+ *
+ * For `timestamptz` columns (audit-log entries, email sends) as opposed to
+ * `formatDateForDisplay`'s calendar dates. Always resort-local: an admin
+ * reading "when did this happen" means Asia/Colombo, never the server's or
+ * the browser's zone.
+ */
+export function formatMoment(value: Date): string {
+  return momentFormatter.format(value);
+}

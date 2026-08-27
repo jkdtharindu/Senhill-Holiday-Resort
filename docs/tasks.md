@@ -232,6 +232,44 @@
       blocking sends. Wrong on both counts — it is a usage counter, the published free tier
       (100/day, 3,000/month) applies as originally documented, and both test emails sent fine.
       Corrected in `API_DOCUMENTATION.md` with an explicit note so the header is not misread again.
+      Slice 16 done (2026-08-27): `email_log` table and volume circuit breaker — the follow-up the
+      slice above identified as its own remaining gap. Built with Opus 5; over-spec against
+      MODEL_SELECTION.md's criteria for work of this shape, logged as an exception there.
+      Pure policy in `src/lib/email-log.ts` (12 unit tests, both thresholds tested at their exact
+      boundaries) plus `src/lib/email-log-service.ts` for the DB side, following the same
+      pure/service split as day-mode and vote. Every function in the service is failure-tolerant
+      and never throws: a logging system that can break the thing it observes is worse than none.
+      Three design decisions worth not undoing:
+      (1) **The breaker fails OPEN.** If the daily count can't be read, the send proceeds. A
+      transient DB error silently suppressing a real guest's confirmation is worse than briefly
+      overshooting a self-imposed limit that already sits under Resend's own.
+      (2) **Blocked attempts aren't counted** toward the daily total — only `sent` and `failed`
+      consume provider quota. Counting blocked ones would make the breaker self-latching: once
+      tripped it could never untrip.
+      (3) **`sent_on` is stored, not derived** from `sent_at`. The counter has to agree with what
+      an admin means by "today" in Asia/Colombo, and a UTC day boundary would disagree for part of
+      every evening.
+      Thresholds sized against real capacity rather than the mail plan: 3 rooms plus a villa at
+      ~2 emails per booking makes a busy day single digits, so warn at 30 and hard-stop at 80
+      (below Resend's 100, leaving headroom to send by hand while investigating).
+      Migration `0003_email_log.sql` is purely additive — two enum types, one table, three
+      indexes, no ALTER on anything existing, so none of the enum-in-transaction hazard that
+      0002 needed a `::text` cast for. **Applied to the live database with the owner's explicit
+      approval**, per `HITL.md`'s gate on migrations against a non-local database.
+      Verified against the live database rather than by build alone — the specific lesson from the
+      slice above: confirmed all 10 columns, 3 indexes and both enums exist with correct types;
+      confirmed existing data untouched (13 bookings, 6 customers, 5 admins); then drove a real
+      send through `sendEmail` and watched the counter go 0 → 1 with a correctly-populated `sent`
+      row. Test row deleted afterwards, `email_log` back to 0. Production build succeeds, lint
+      clean, 223 unit tests pass (up from 211).
+      Admin dashboard gained a "Recent email activity" panel plus banners for elevated volume,
+      a tripped breaker, and any same-day failures — failure reasons shown inline, since the whole
+      point is that nobody should have to go looking to find out something broke.
+      **Not built, deliberately:** delivery confirmation (a `sent` row means the provider accepted
+      it, not that it arrived — bounces need Resend webhooks), retries, and any alerting that
+      reaches someone not looking at the dashboard. Email-based alerting was considered and
+      deferred: an email about too much email can feed the spike it reports. See `MAINTENANCE.md`
+      §5.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

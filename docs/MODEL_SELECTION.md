@@ -64,6 +64,20 @@ No model checks needed — already shipped.
   through the real Resend API (two emails confirmed received by the owner), not just by a green
   build — the original mistake was treating "build + tests pass" as evidence about a runtime
   behaviour neither one exercises. See `MEMORY.md` (2026-08-27) for the post-mortem.
+- **Slice 16** (`email_log` table + volume circuit breaker, 2026-08-27) used **Opus 5**.
+
+  > **⚠️ EXCEPTION LOGGED — over-spec.** This is a one-table, one-pure-module, one-service-module
+  > slice with a dashboard panel — Sonnet 5 by this file's own criteria (compare Slice 10 and
+  > Slice 11). The owner was already on Opus 5 from the preceding bugfix and chose to continue.
+  > Flagged before starting rather than silently complied with, per the protocol below. As with
+  > Slices 9 and 15's follow-up, no verification adjustment was needed — an over-spec model is not
+  > a risk the way an under-spec one is.
+
+  Outcome: 12 new unit tests (223 total, up from 211), production build succeeds, lint clean, and
+  — following the lesson from Slice 15 — verified against the live database rather than by build
+  alone: schema shape confirmed column-by-column, existing data confirmed untouched, and a real
+  send driven end-to-end to watch the counter and log row update. Migration applied to production
+  with the owner's explicit approval per `HITL.md`.
 
 See `docs/tasks.md` for the full verification log for each.
 

@@ -111,24 +111,23 @@ at every status change that matters to them.
 - **No guest-configurable preferences.** A guest cannot opt out of these emails; there is no
   unsubscribe mechanism. At single-property scale with transactional (not marketing) email, this
   is an acceptable gap, not an oversight.
-- **No delivery tracking or retry.** `sendEmail()` (`src/lib/email.ts`) fires once and logs on
-  failure; there is no queue, no retry, and no record in the database of whether a given email
-  was actually delivered. A silently-bounced admin alert (e.g. a mistyped admin email) has no
-  visible symptom beyond the server log.
+- **Send attempts ARE now logged (built 2026-08-27), but delivery still is not.** `email_log`
+  records every attempt with its outcome, and the admin dashboard surfaces today's volume, any
+  failures, and the most recent attempts. This closes the invisibility that let the 2026-08-27
+  outage go unnoticed for hours.
 
-  **This is not hypothetical — it already bit once.** On the day this feature shipped it sent
-  zero emails in production, and the swallowed-errors design meant there was no signal anywhere
-  until someone thought to check Resend's dashboard by hand (see `MEMORY.md`, 2026-08-27). The
-  underlying send bug is fixed; the *invisibility* that let it go unnoticed is not.
+  **What it still does not tell you:** `outcome = sent` means Resend *accepted* the message, not
+  that it arrived. A bounce after acceptance is invisible here — capturing that needs Resend's
+  webhooks, which are not wired up. There is also no retry: a failed send stays failed, and
+  recovering it means an admin contacting the guest directly.
+- **Volume alerting is dashboard-only.** The circuit breaker (80 recipients/day) genuinely stops
+  a runaway without anyone watching, which is the important half. But the *warning* at 30/day,
+  and the failure notice, only appear to an admin who opens the dashboard — the same passive
+  mechanism that `§5`'s original entry criticised.
 
-  An `email_log` table (one row per send attempt: event, recipient, outcome, timestamp) would
-  close this and the volume-alerting gap below in one change. Discussed with the owner
-  2026-08-27, not yet built.
-- **No volume alerting.** Nothing warns if email volume spikes. Worth sizing correctly if built:
-  with 3 rooms and a villa, ~2 emails per booking, a genuine day's traffic is single digits —
-  100 emails/day (the plan cap) is not reachable by real bookings, so a spike means a bug or
-  abuse. An alert threshold therefore belongs well below the cap (~30–50/day), not at it, and
-  any alert-by-email needs a once-per-day guard so it cannot feed the very spike it reports.
+  Alerting by email was considered and deliberately deferred: an email about too much email can
+  feed the spike it reports, so it needs a once-per-day guard and care about which path sends it.
+  Worth building if a failure ever goes unnoticed long enough to matter.
 - **Sending domain not yet verified.** `EMAIL_FROM` currently points at Resend's shared
   `onboarding@resend.dev` test sender rather than a domain the property owns — functional, but
   guests see a generic address. See `.env.example`'s comment for the swap-over steps once a
@@ -138,8 +137,10 @@ at every status change that matters to them.
   redeploying — there is no admin-editable equivalent yet, by design for now (see
   `API_DOCUMENTATION.md`'s note on this).
 
-**Revisit when:** an admin alert email demonstrably fails to arrive and nobody notices for a
-while (points at needing delivery tracking), a second sign-in/contact channel is wanted
+**Revisit when:** a bounce causes a guest to miss a confirmation nobody knew about (points at
+wiring up Resend's delivery webhooks), a failure sits unnoticed because nobody opened the
+dashboard (points at push alerting, with the loop guard noted above), a second contact channel is
+wanted
 (SMS/WhatsApp), or template copy needs to change often enough that code deploys for wording edits
 becomes a real friction point (points at an admin-editable template system).
 
