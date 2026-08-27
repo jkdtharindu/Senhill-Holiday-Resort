@@ -105,3 +105,50 @@ export function volumeLevel(recipientsSentToday: number): VolumeLevel {
   if (recipientsSentToday >= DAILY_WARN_THRESHOLD) return "elevated";
   return "normal";
 }
+
+/* ------------------------------------------------------------------------
+ * TEMPORARY — remove once a sending domain is verified in Resend.
+ *
+ * An unverified Resend account will only accept sends addressed to the
+ * account owner's own address. Critically, it rejects the ENTIRE send if
+ * any other recipient is present — so an admin alert to three admins fails
+ * outright rather than partially delivering. Confirmed in production
+ * 2026-08-27: "You can only send testing emails to your own email address".
+ *
+ * `EMAIL_RESTRICT_TO` names the one deliverable address. While it is set,
+ * admin alerts go only there. Unset it after verifying a domain and normal
+ * multi-admin behaviour returns with no code change.
+ *
+ * Deliberately applied ONLY to admin alerts, never to guest mail. Silently
+ * redirecting a guest's confirmation to the owner would deliver the wrong
+ * person's mail and make the log lie about who was contacted. A guest
+ * confirmation to a non-owner address is instead allowed to fail honestly
+ * and be recorded as such — that failure is real, and hiding it would
+ * recreate exactly the blindness `email_log` exists to prevent.
+ * ---------------------------------------------------------------------- */
+
+export interface RecipientRestriction {
+  recipients: string[];
+  /** Addresses dropped by the restriction — logged so the gap is visible. */
+  suppressed: string[];
+}
+
+/**
+ * Narrow a recipient list to the single deliverable address, if one is
+ * configured. Matching is case-insensitive — an admin row's stored casing
+ * should not decide whether they get mail.
+ *
+ * Returns everything unchanged when `restrictTo` is absent or blank, so
+ * clearing the env var is all it takes to restore normal behaviour.
+ */
+export function restrictAdminRecipients(
+  all: readonly string[],
+  restrictTo: string | undefined,
+): RecipientRestriction {
+  const target = restrictTo?.trim().toLowerCase();
+  if (!target) return { recipients: [...all], suppressed: [] };
+
+  const recipients = all.filter((e) => e.trim().toLowerCase() === target);
+  const suppressed = all.filter((e) => e.trim().toLowerCase() !== target);
+  return { recipients, suppressed };
+}

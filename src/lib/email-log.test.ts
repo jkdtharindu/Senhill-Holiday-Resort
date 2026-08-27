@@ -14,6 +14,7 @@ import {
   DAILY_SEND_LIMIT,
   DAILY_WARN_THRESHOLD,
   decideSendAllowed,
+  restrictAdminRecipients,
   volumeLevel,
 } from "./email-log.ts";
 
@@ -68,6 +69,63 @@ describe("volumeLevel — how a day reads to a human", () => {
 
   it("reports at_limit once sending has actually stopped", () => {
     assert.equal(volumeLevel(DAILY_SEND_LIMIT), "at_limit");
+  });
+});
+
+describe("restrictAdminRecipients — the unverified-domain workaround", () => {
+  const ADMINS = [
+    "jkdtharindu@gmail.com",
+    "srivacation0@gmail.com",
+    "cs.jayasinghe1990@gmail.com",
+  ];
+
+  it("passes everything through when no restriction is configured", () => {
+    // The post-domain-verification state: unset the env var, nothing changes.
+    const r = restrictAdminRecipients(ADMINS, undefined);
+    assert.deepEqual(r.recipients, ADMINS);
+    assert.deepEqual(r.suppressed, []);
+  });
+
+  it("treats a blank or whitespace-only value as no restriction", () => {
+    // An env var present but empty must not silently mute every admin.
+    assert.deepEqual(restrictAdminRecipients(ADMINS, "").recipients, ADMINS);
+    assert.deepEqual(restrictAdminRecipients(ADMINS, "   ").recipients, ADMINS);
+  });
+
+  it("keeps only the deliverable address, and reports who was dropped", () => {
+    const r = restrictAdminRecipients(ADMINS, "jkdtharindu@gmail.com");
+    assert.deepEqual(r.recipients, ["jkdtharindu@gmail.com"]);
+    assert.deepEqual(r.suppressed, [
+      "srivacation0@gmail.com",
+      "cs.jayasinghe1990@gmail.com",
+    ]);
+  });
+
+  it("matches case-insensitively — stored casing must not decide delivery", () => {
+    const r = restrictAdminRecipients(
+      ["JKDTharindu@Gmail.com", "other@example.com"],
+      "jkdtharindu@gmail.com",
+    );
+    assert.deepEqual(r.recipients, ["JKDTharindu@Gmail.com"]);
+  });
+
+  it("tolerates surrounding whitespace on both sides", () => {
+    const r = restrictAdminRecipients([" jkdtharindu@gmail.com "], " jkdtharindu@gmail.com ");
+    assert.equal(r.recipients.length, 1);
+  });
+
+  it("returns empty when the restricted address is not an admin at all", () => {
+    // Correct, and the caller must notice: sending to nobody is better than
+    // sending to someone the provider will reject, which fails the whole send.
+    const r = restrictAdminRecipients(ADMINS, "nobody@example.com");
+    assert.deepEqual(r.recipients, []);
+    assert.equal(r.suppressed.length, 3);
+  });
+
+  it("does not mutate the caller's array", () => {
+    const original = [...ADMINS];
+    restrictAdminRecipients(ADMINS, "jkdtharindu@gmail.com");
+    assert.deepEqual(ADMINS, original);
   });
 });
 
