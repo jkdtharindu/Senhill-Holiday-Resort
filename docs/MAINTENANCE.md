@@ -128,10 +128,37 @@ at every status change that matters to them.
   Alerting by email was considered and deliberately deferred: an email about too much email can
   feed the spike it reports, so it needs a once-per-day guard and care about which path sends it.
   Worth building if a failure ever goes unnoticed long enough to matter.
-- **Sending domain not yet verified.** `EMAIL_FROM` currently points at Resend's shared
-  `onboarding@resend.dev` test sender rather than a domain the property owns — functional, but
-  guests see a generic address. See `.env.example`'s comment for the swap-over steps once a
-  domain is verified.
+- **🔴 No verified sending domain — guest confirmations DO NOT WORK in production.** This is
+  the most important open item in this file, discovered by a real production booking on
+  2026-08-27.
+
+  An unverified Resend account accepts sends **only to the account owner's own address**
+  (`jkdtharindu@gmail.com`), and rejects the **entire send** if any other recipient is
+  present. Verbatim: *"You can only send testing emails to your own email address."*
+
+  Consequences today:
+  - **A real guest receives nothing.** Their confirmation is rejected and recorded as `failed`.
+  - Admin alerts would have reached nobody, since one bad recipient fails the whole send.
+
+  **Current workaround:** `EMAIL_RESTRICT_TO` (env var) narrows admin alerts to the one
+  deliverable address, so the owner at least learns a booking arrived. Guest mail is
+  deliberately NOT redirected — sending a guest's confirmation to the owner would deliver the
+  wrong person's mail and make `email_log` misreport who was contacted.
+
+  Two admins (`srivacation0@gmail.com`, `cs.jayasinghe1990@gmail.com`) are therefore **not**
+  being notified of new bookings. Every send logs a warning naming them.
+
+  **The fix, when affordable:** register a domain (~$12/yr), verify it at
+  resend.com/domains, point `EMAIL_FROM` at an address on it, and **unset `EMAIL_RESTRICT_TO`
+  in Vercel**. No code change — the restriction lifts itself when the variable goes.
+
+  **Free alternative if a domain stays out of reach:** send through Gmail SMTP with an app
+  password (500/day, far above this property's needs). Deliverability is good because the mail
+  genuinely originates from Gmail. Costs a code change — swapping the Resend SDK inside
+  `lib/email.ts` — and guests would see a personal Gmail address as sender.
+
+  **Revisit when:** there is budget for a domain, or a guest complains they never received a
+  confirmation. Do not consider email "done" until this is resolved.
 - **Template copy lives in code, not the admin panel.** Unlike DefaultNotes (Slice 11), the
   wording in `src/lib/email-templates.ts` can only be changed by editing the file and
   redeploying — there is no admin-editable equivalent yet, by design for now (see
