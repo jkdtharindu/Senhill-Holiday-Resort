@@ -96,9 +96,12 @@ payment amount and collection happen manually, outside the system.
   owner decision (see `MEMORY.md`, 2026-08-27, and `MAINTENANCE.md` §5 for the full account).
   Admin alerts are narrowed to one working address via `EMAIL_RESTRICT_TO` in the meantime. This
   note should be removed once a domain is verified and this FR is genuinely met.
-- FR6c: **Added 2026-08-27.** A public `/contact` page shows the property's phone numbers, email
-  addresses, and a map to its location, with a notice asking guests to call ahead and confirm the
-  final approach road rather than rely solely on the embedded map's routing.
+- FR6c: **Added 2026-08-27; WhatsApp buttons added same day.** A public `/contact` page shows the
+  property's phone numbers, email addresses, and a map to its location, with a notice asking
+  guests to call ahead and confirm the final approach road rather than rely solely on the
+  embedded map's routing. Each phone number has a WhatsApp button (`wa.me` click-to-chat, guest-
+  initiated with a pre-filled draft) alongside its `tel:` link — this is not automated messaging
+  and does not touch §4's SMS/WhatsApp non-goal, since nothing is sent by the app itself.
 
 **Admin**
 - FR7: Log in via email/password (fully separate from customer Google auth).

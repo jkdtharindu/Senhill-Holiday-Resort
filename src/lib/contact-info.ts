@@ -25,3 +25,29 @@ export const CONTACT_INFO = {
 } as const;
 
 export const primaryContactEmail = CONTACT_INFO.emails[0];
+
+/**
+ * A `wa.me` click-to-chat link for one of `CONTACT_INFO.phones`.
+ *
+ * This is a guest-INITIATED link, not an automated message — the guest
+ * clicks it and sends whatever they type themselves. That distinction is
+ * why it doesn't touch `PRD.md` §4's "no automatic messaging via SMS or
+ * WhatsApp" — nothing is sent by the app; it only opens WhatsApp with a
+ * pre-filled draft, the same relationship a `mailto:` link with a subject
+ * has to actually sending an email.
+ *
+ * `wa.me` requires the full international number with no leading `0`, no
+ * spaces, and no `+`. Numbers here are stored in local Sri Lankan format
+ * (`0` + 9 digits), so the leading `0` is replaced with the country code
+ * (`94`) rather than assumed absent — this only handles Sri Lankan local
+ * format, not arbitrary international input.
+ */
+export function whatsappLink(phone: string, message?: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const international = digits.startsWith("0") ? `94${digits.slice(1)}` : digits;
+  const query = message ? `?text=${encodeURIComponent(message)}` : "";
+  return `https://wa.me/${international}${query}`;
+}
+
+/** Default draft text for the contact page's WhatsApp buttons. */
+export const WHATSAPP_DEFAULT_MESSAGE = `Hi, I'd like to ask about a stay at ${CONTACT_INFO.propertyName}.`;

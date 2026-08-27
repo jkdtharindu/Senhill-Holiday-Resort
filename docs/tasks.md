@@ -295,6 +295,14 @@
       tests) before being trusted, since it had never run before. Production build succeeds,
       lint clean.
       Full rationale, including the three rejected alternatives, in `MEMORY.md` (2026-08-27).
+      Small addition, same day: WhatsApp click-to-chat buttons on `/contact`, one per phone
+      number, alongside the existing `tel:` link. `whatsappLink()` (`src/lib/contact-info.ts`)
+      converts the stored local Sri Lankan format to the `wa.me` international format (leading
+      `0` → `94` prefix) and appends a pre-filled draft message. Guest-initiated, not automated —
+      does not touch PRD §4's SMS/WhatsApp non-goal, since the app sends nothing itself; the
+      guest still has to press send in WhatsApp. 6 new unit tests (243 total). Browser-verified
+      against a live dev server: both numbers produce correct `wa.me` links with the message
+      properly URL-encoded, and the buttons render correctly alongside the existing phone links.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

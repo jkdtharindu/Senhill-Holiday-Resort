@@ -688,6 +688,17 @@ turn-by-turn routing. This exists because consumer map data for a rural resort a
 exactly the kind of detail that goes stale or wrong — the notice is a deliberate hedge against
 "map hallucination" sending a guest down the wrong road on arrival, not a general disclaimer.
 
+**Added 2026-08-27 — WhatsApp click-to-chat buttons.** Each phone number gets a "WhatsApp" button
+beside its `tel:` link, built by `whatsappLink()` (`src/lib/contact-info.ts`) as a `wa.me` URL
+with a pre-filled draft message. Converts the stored local Sri Lankan format (leading `0`) to the
+international format `wa.me` requires (`94` prefix) — 6 unit tests cover this conversion plus
+message-encoding and the no-message case.
+
+This is **guest-initiated, not automated messaging** — the button only opens WhatsApp with a
+draft the guest still has to send themselves, the same relationship a `mailto:` link with a
+pre-filled subject has to actually sending an email. It does not touch `PRD.md` §4's "no
+automatic messaging via SMS/WhatsApp" non-goal, since the app itself sends nothing.
+
 ---
 
 ## Error format

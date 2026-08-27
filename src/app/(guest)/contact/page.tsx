@@ -15,8 +15,9 @@
 
 import { Alert } from "@/components/ui/alert";
 import { CardPanel, PageHeader, PageShell } from "@/components/ui/card";
+import { LinkButton } from "@/components/ui/button";
 import { cx, TEXT_BODY, TEXT_HEADING } from "@/components/ui/styles";
-import { CONTACT_INFO } from "@/lib/contact-info";
+import { CONTACT_INFO, WHATSAPP_DEFAULT_MESSAGE, whatsappLink } from "@/lib/contact-info";
 
 export const metadata = {
   title: "Contact — Senhill Holiday Resort",
@@ -35,15 +36,24 @@ export default function ContactPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <CardPanel title="Phone">
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-3">
             {CONTACT_INFO.phones.map((phone) => (
-              <li key={phone}>
+              <li key={phone} className="flex flex-wrap items-center justify-between gap-2">
                 <a
                   href={`tel:${phone.replace(/\s+/g, "")}`}
                   className={cx("text-sm font-medium underline-offset-2 hover:underline", TEXT_HEADING)}
                 >
                   {phone}
                 </a>
+                <LinkButton
+                  href={whatsappLink(phone, WHATSAPP_DEFAULT_MESSAGE)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="secondary"
+                  size="sm"
+                >
+                  WhatsApp
+                </LinkButton>
               </li>
             ))}
           </ul>
