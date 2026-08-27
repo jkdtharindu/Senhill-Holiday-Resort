@@ -13,6 +13,7 @@
 | Customer auth | **NextAuth.js (Auth.js) with the Google provider** | The simplest realistic path for someone without prior OAuth experience — NextAuth handles the token exchange, session cookies, and refresh for you; you mostly just paste in a Client ID/Secret from Google Cloud Console. Far less manual token-verification code than wiring Google Identity Services by hand. See `GOOGLE_OAUTH_SETUP.md`. |
 | Admin auth | Separate, custom email/password + bcrypt + own JWT — **not** routed through NextAuth | Kept deliberately apart from the customer auth system (see HITL.md) — a compromised or misconfigured NextAuth/Google setup must never be able to reach admin routes. Two independent systems, not two providers on one system. |
 | Hosting | **Vercel** (confirmed) + a managed Postgres add-on — **Neon** recommended (native Vercel integration, generous free tier, simplest setup for a first-time database), Supabase or Railway are fine alternatives | Standard, low-friction pairing for Next.js; free/low tiers sufficient at single-property scale. |
+| Email | **Resend** (added 2026-08-27) | Free tier (100/day, 3,000/month) comfortably covers this property's volume — a booking generates at most 2 emails, so even 50 bookings/month stays under the limit. Simple SDK, first-party Vercel integration, no separate account infra to run. Chosen over SendGrid (heavier setup) and AWS SES (needs its own AWS account) for the same "least friction for a single small property" reasoning as the hosting/DB choices above. |
 
 ## Persistence requirement (explicit, not assumed)
 Confirmed by the project owner: the database must be a real, always-running managed Postgres
@@ -102,6 +103,30 @@ Every screen is a server component that fetches directly from the database via D
 - Admin `/admin/bookings/[id]`: calls `fetchAdminBooking()` with the same service module.
 
 If a future requirement (mobile app, third-party integration) needs HTTP reads, they would become thin wrappers over the existing service functions — query logic lives in one place rather than reimplemented per transport. See MAINTENANCE.md §14.
+
+## Email notifications — fire-after-commit, never blocking (added 2026-08-27)
+
+Three write routes (`POST /bookings`, `POST /bookings/:id/vote`, `POST /bookings/:id/cancel`)
+send email as a side effect. The pattern is the same in all three, and is worth naming once here
+rather than trusting each call site to reinvent it correctly:
+
+1. The write happens inside its own `db.transaction(...)`, same as before this feature existed.
+   Nothing about the write path changed.
+2. Whatever the email needs (guest name, item name, dates) is captured from data already read
+   inside that transaction — no extra query is added to the write path itself.
+3. The transaction resolves, and **only then** — outside it, after `await db.transaction(...)`
+   — is the notification fired, via `void notifyXxx(...).catch(...)`.
+4. `lib/email.ts`'s `sendEmail()` never throws; a Resend error or a missing API key is logged and
+   swallowed there.
+
+The result: a mail provider outage can never turn a successful booking, vote, or cancellation
+into an error response, and the row lock held by each route's `SELECT ... FOR UPDATE` is never
+extended by a slow network call to a third party. This is a deliberate reliability trade —
+worse observability (a failed send is a log line, not a retried job or a user-visible error) in
+exchange for guaranteeing the booking system itself never depends on email working. See
+`docs/API_DOCUMENTATION.md`'s "Email Notifications" section for what each event sends and to
+whom, and `docs/MAINTENANCE.md` §5 for what is deliberately still out of scope (SMS, delivery
+tracking, admin-editable template copy).
 
 ## Known trade-offs and deferred work
 Decisions taken with a known cost, each with the condition under which it should be revisited,

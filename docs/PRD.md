@@ -31,7 +31,8 @@ payment amount and collection happen manually, outside the system.
 - **In-app pricing.** No price is displayed, calculated, or managed anywhere in this version.
   The customer only sees a fixed notice that an advance payment is required to confirm the
   booking; the amount and collection happen entirely outside the system, arranged manually.
-- Automatic messaging/reminders (SMS/WhatsApp/email).
+- Automatic messaging/reminders via SMS or WhatsApp. **Email is no longer out of scope** — see
+  FR6b, added 2026-08-27.
 - Guest reviews/ratings.
 - Multi-property support — one hotel/villa only.
 - ~~Shared inventory blocking logic between villa and rooms~~ — resolved by the DayMode
@@ -68,9 +69,20 @@ payment amount and collection happen manually, outside the system.
   specific conflicting date(s).
 - FR5b: Customer sees a fixed notice during booking that an advance payment is required to
   confirm — no amount or payment collection happens in-app.
-- FR6: Log in via Google to track own booking status (`reserved` vs `booked` vs `declined`).
-- FR6a: A `reserved` booking cannot be cancelled by the customer — cancellation/decline is
-  admin-only (confirmed via Grill Me). The customer can view status but has no cancel action.
+- FR6: Log in via Google to track own booking status (`reserved` vs `booked` vs `declined` vs
+  `cancelled`).
+- FR6a: **Superseded 2026-08-26.** A customer may withdraw their OWN booking while it is still
+  `reserved` (self-service, immediate, no ApprovalVote). Once a booking reaches `booked`, only an
+  admin can cancel it — a confirmed stay usually has an advance payment arranged offline, so
+  ending it needs a human who can also arrange the refund. See `docs/tasks.md` (Slice 13) and
+  `MEMORY.md` (2026-08-26 entry) for the full rule and rationale.
+- FR6b: **Added 2026-08-27.** The customer receives email at each status change that matters to
+  them: a confirmation when their request is submitted, an approved/declined notice when an
+  admin's vote resolves it, and a cancellation confirmation. Sent via Resend, best-effort — see
+  `docs/API_DOCUMENTATION.md`'s "Email Notifications" section.
+- FR6c: **Added 2026-08-27.** A public `/contact` page shows the property's phone numbers, email
+  addresses, and a map to its location, with a notice asking guests to call ahead and confirm the
+  final approach road rather than rely solely on the embedded map's routing.
 
 **Admin**
 - FR7: Log in via email/password (fully separate from customer Google auth).
@@ -92,6 +104,10 @@ payment amount and collection happen manually, outside the system.
 - FR14: Edit the single DefaultNotes block.
 - FR15: See the full day-detail view (same as customer FR3, plus guest identity/contact and
   approval status per booking).
+- FR15a: **Added 2026-08-27.** Every active admin receives an email alert when a guest submits a
+  new booking request, naming the guest, item, dates and contact details — so the approval
+  workflow (FR9) does not depend solely on an admin remembering to open the panel. A deactivated
+  admin is excluded from this alert.
 
 **Super Admin**
 - FR16: Everything in Admin, plus: create new admin accounts, deactivate/remove admin accounts,

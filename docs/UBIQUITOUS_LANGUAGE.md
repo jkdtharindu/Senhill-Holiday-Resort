@@ -21,6 +21,7 @@ synonyms mid-build.
 | Term | Definition |
 |---|---|
 | **DayMode** | Admin-set toggle per calendar date: `room_mode` (individual Rooms bookable that day) or `villa_mode` (only the Villa bookable that day). Mutually exclusive by design — see `PRD.md` §9. |
+| **DayModeClearing** | Added 2026-08-27. Unsetting a date's DayMode, returning it to "no mode" (`unavailable` CalendarState) — e.g. for a renovation or a special closure. Subject to the same DayModeSwitchBlock rule as a mode switch: a date with an active Booking under its current mode cannot be cleared. Distinct from never having set a mode at all only in that a date can now move *backward* through this state, not just forward. |
 
 ## Calendar states — two distinct levels, do not conflate
 
@@ -41,6 +42,7 @@ synonyms mid-build.
 | **DayModeSwitchBlock** | The rule that a date's DayMode cannot be changed while a conflicting Booking (`reserved` or `booked`) exists under the current mode for that date. The admin must resolve the existing booking first. |
 | **CustomerCancellation** | **Superseded 2026-08-26.** A Customer may withdraw (move to `cancelled`) their OWN Booking, but only while it is still `reserved` — once `booked`, only an admin can cancel it. Withdrawal is immediate, self-service, and carries no ApprovalVote. Distinct from `declined`: `declined` is the two-admin process rejecting a Booking that was never confirmed; `cancelled` undoes a Booking that was already accepted, or was withdrawn by the customer before it got that far. See `docs/tasks.md` (Slice 13) and `MEMORY.md` (2026-08-26 entry). |
 | **ApprovalQueueBlock** | Added 2026-08-27. Since several `reserved` Bookings may compete for the same BookableItem and overlapping dates (see BookingStatus above and `MAINTENANCE.md` §13), an `approve` ApprovalVote is refused (409) if a competing `reserved` Booking has a stronger claim: one with an advance payment recorded always outranks one without, regardless of submission order; otherwise earlier submission wins. The response names the stronger Booking so the admin can act on it directly. A `decline` vote is never subject to this — it only frees a date, so there is nothing to jump ahead of. |
+| **EmailNotification** | Added 2026-08-27. A best-effort email sent via Resend after a booking-lifecycle write (`POST /bookings`, an ApprovalVote that resolves a Booking, or a cancellation) has already committed. Never allowed to affect the outcome of the write it follows — see `docs/ARCHITECTURE.md`'s "Email notifications" section. Not the same concept as "Automatic messaging/reminders," which `PRD.md` §4 still rules out for SMS/WhatsApp. |
 
 ## Pricing — out of scope this version
 No pricing terms are active in this version (Quotation/BaseRate dropped from scope — see

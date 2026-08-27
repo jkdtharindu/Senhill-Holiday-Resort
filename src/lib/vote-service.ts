@@ -22,6 +22,7 @@ import { and, eq, gt, lte, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   approvalVotes,
+  bookableItems,
   bookingAuditLog,
   bookings,
   type BookingStatus,
@@ -32,6 +33,8 @@ import {
   type CompetingBooking,
   type StandingVote,
 } from "./vote";
+import { sendEmail } from "./email";
+import { bookingApprovedEmail, bookingDeclinedEmail } from "./email-templates";
 
 export interface CastVoteInput {
   bookingId: string;
@@ -61,7 +64,9 @@ export type CastVoteResult =
  * should surface as a real error to the caller, not appear to succeed.
  */
 export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
-  return db.transaction(async (tx) => {
+  let notification: VoteResolvedNotification | null = null;
+
+  const result = await db.transaction(async (tx): Promise<CastVoteResult> => {
     // Lock the booking row for the duration of the transaction so a
     // concurrent second vote arriving at the same instant cannot both read
     // "reserved" and both apply — one will queue behind the other, see the
@@ -76,6 +81,9 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
         checkOut: bookings.checkOut,
         createdAt: bookings.createdAt,
         advancePaidDate: bookings.advancePaidDate,
+        guestName: bookings.guestName,
+        email: bookings.email,
+        guestsCount: bookings.guestsCount,
       })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
@@ -193,6 +201,24 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
       });
     }
 
+    // Only booked/declined are worth emailing about — a vote that doesn't
+    // resolve the booking yet (e.g. the first of two approvals) is not
+    // guest-visible news. Captured here, sent AFTER the transaction commits
+    // (below) — same reasoning as booking-service.ts: a mail failure, or
+    // even just mail latency, must never affect whether the vote itself
+    // commits.
+    if (outcome.statusChanged && (outcome.nextStatus === "booked" || outcome.nextStatus === "declined")) {
+      notification = {
+        bookableItemId: booking.bookableItemId,
+        guestName: booking.guestName,
+        email: booking.email,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        guestsCount: booking.guestsCount,
+        nextStatus: outcome.nextStatus,
+      };
+    }
+
     return {
       ok: true,
       previousVote: outcome.previousVote,
@@ -200,5 +226,50 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
       nextStatus: outcome.nextStatus,
       statusChanged: outcome.statusChanged,
     };
+  });
+
+  if (notification) {
+    void notifyVoteResolved(notification).catch((err: unknown) => {
+      console.error("[vote-service] notifyVoteResolved failed:", err);
+    });
+  }
+
+  return result;
+}
+
+interface VoteResolvedNotification {
+  bookableItemId: string;
+  guestName: string;
+  email: string;
+  checkIn: string;
+  checkOut: string;
+  guestsCount: number;
+  nextStatus: "booked" | "declined";
+}
+
+async function notifyVoteResolved(input: VoteResolvedNotification): Promise<void> {
+  const [item] = await db
+    .select({ name: bookableItems.name })
+    .from(bookableItems)
+    .where(eq(bookableItems.id, input.bookableItemId))
+    .limit(1);
+  const itemName = item?.name ?? "your booking";
+
+  const details = {
+    guestName: input.guestName,
+    itemName,
+    checkIn: input.checkIn,
+    checkOut: input.checkOut,
+    guestsCount: input.guestsCount,
+  };
+
+  const content =
+    input.nextStatus === "booked" ? bookingApprovedEmail(details) : bookingDeclinedEmail(details);
+
+  await sendEmail({
+    to: input.email,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
   });
 }

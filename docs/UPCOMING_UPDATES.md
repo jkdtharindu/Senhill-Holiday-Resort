@@ -1,6 +1,6 @@
 # Upcoming Updates & Future Requirements
 
-**Last Updated:** 2026-08-26 | **Owner:** Tharindu | **Status:** In Planning
+**Last Updated:** 2026-08-27 | **Owner:** Tharindu | **Status:** In Planning
 
 ---
 
@@ -59,6 +59,37 @@
     full design rationale.
   - Status: ✅ Live on main branch
 
+- [x] **DayMode clearing — unset a date back to "not bookable"** (2026-08-27)
+  - Completed: admins can now clear a previously-set `room_mode`/`villa_mode` date back to unset,
+    for renovations or special closures. Same booking-conflict rule as a mode switch — a date
+    with an active booking under its current mode cannot be cleared.
+  - Files affected: `src/lib/day-mode.ts`, `src/lib/day-mode-service.ts`, new `DELETE
+    /api/calendar/day-mode`, `src/app/admin/(panel)/calendar/day-mode-controls.tsx`
+  - Status: ✅ Live on main branch
+
+- [x] **Email notifications (Resend)** — ✅ **SHIPPED 2026-08-27** (Sonnet 5, no exception)
+  - Was priority 3 below; built ahead of Reserve Request at the owner's request, alongside the
+    contact page.
+  - Built: guest confirmation + admin alert on `POST /bookings`; approved/declined on the
+    resolving vote; cancellation confirmation. `src/lib/email.ts` (Resend wrapper, best-effort,
+    never throws), `src/lib/email-templates.ts` (one function per event), `src/lib/
+    notification-recipients.ts` (active-admin lookup). Every send fires only after its write
+    transaction commits, so mail failure/latency can never affect the booking/vote/cancellation
+    itself.
+  - Resolves `docs/MAINTENANCE.md` §5, previously flagged as "the largest operational risk in
+    the system."
+  - Cost: Resend free tier (100/day, 3,000/month) — well within this property's expected volume.
+  - See `docs/API_DOCUMENTATION.md`'s "Email Notifications" section for the full mechanism.
+  - Status: ✅ Live on main branch
+
+- [x] **Contact page** (2026-08-27)
+  - Completed: public `/contact` with phone numbers, email addresses, and a map to the property,
+    plus a notice asking guests to call ahead and confirm the final approach road — guards
+    against the map's routing being wrong or stale on a rural access road.
+  - Files affected: new `src/app/(guest)/contact/page.tsx`, `src/lib/contact-info.ts` (shared
+    with the email templates' footer so contact details can't drift between the two surfaces)
+  - Status: ✅ Live on main branch
+
 ### 🔴 Immediate (Current Sprint) — New Build Order
 
 - [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)
@@ -78,12 +109,9 @@
   - Date recovery required no code: every blocking query already uses a status allowlist
   - See `docs/API_DOCUMENTATION.md` and `docs/tasks.md` for the full verification log
 
-- [ ] **3. Email Notifications** (SendGrid/Resend)
-  - Why: Guests don't know booking received; admins have no alerts
-  - Complexity: Medium
-  - Impact: Critical operational visibility
-  - Files: New `src/services/email.ts`, env config, API routes
-  - Status: **THIRD PRIORITY**
+- [x] **3. Email Notifications (Resend)** — ✅ **SHIPPED 2026-08-27** (Sonnet 5, no exception),
+  built ahead of its listed priority order, at the owner's request, alongside the contact page.
+  See the "Recently Completed" entry above for the full summary.
 
 - [ ] **Restrict crops/uploads to known product origins**
   - Why: Security — prevent malicious file types
@@ -269,12 +297,14 @@ The system already prevents admins from switching day modes (room-basis ↔ full
 
 ## Implementation Priority
 
-**Build Order (Owner Approved 2026-08-26):**
+**Build Order (Owner Approved 2026-08-26; email notifications reordered ahead of Reserve Request
+at the owner's request on 2026-08-27 — see the "Recently Completed" entries above):**
 
 1. **Reserve Request for Reserved Bookings** — Allow guests to submit multiple reserve requests while awaiting approval
    - Enables better booking management UX
    - No schema changes needed (uses existing bookings table)
    - Medium complexity
+   - Status: not yet built — still next
 
 2. **Booking Cancellation System** — Full cancellation workflow with refunds & date recovery
    - Schema changes (add `cancelled` status, timestamps)
@@ -282,11 +312,13 @@ The system already prevents admins from switching day modes (room-basis ↔ full
    - Customer + admin UI
    - Audit logging
    - High complexity
+   - Status: ✅ shipped 2026-08-26 (no refund calculation — record-only, see the entry above)
 
 3. **Email Notifications** — Send emails on booking events (reserve, approval, cancellation)
-   - SendGrid/Resend integration
+   - Resend integration
    - Templates for guest & admin emails
    - Medium complexity
+   - Status: ✅ shipped 2026-08-27, ahead of its listed order
 
 ---
 
@@ -302,6 +334,15 @@ The system already prevents admins from switching day modes (room-basis ↔ full
 - Dates freed by cancellation should immediately become available; consider bulk re-opening if many cancelled at once
 - Refund % should be calculated at **cancellation time**, not payment time, for accuracy
 - Keep cancellation reason audit trail detailed — may be needed for disputes
+- **As built:** no refund % is calculated anywhere — pricing is out of scope (PRD §4). See the
+  "Booking Cancellation System" entry above.
+
+### Email Notifications (as built, 2026-08-27)
+- Built as best-effort, fire-after-commit — a mail failure never affects the booking/vote/
+  cancellation it's attached to. See `docs/ARCHITECTURE.md`'s "Email notifications" section.
+- Templates are plain functions in `src/lib/email-templates.ts`, not database rows — kept
+  editable as code for now rather than building an admin-editable system pre-emptively.
+- No SMS/WhatsApp, no delivery tracking/retry, no guest opt-out. See `docs/MAINTENANCE.md` §5.
 
 ### General
 - All three features should follow HITL guidelines (see docs/HITL.md)

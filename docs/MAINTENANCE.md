@@ -93,20 +93,41 @@ grows large enough to matter — at a few admins signing in daily, that is years
 
 ---
 
-## 5. No notifications of any kind
+## 5. Email notifications — resolved 2026-08-27; SMS/WhatsApp still out of scope
 
-**What it does.** Nothing is emailed or texted. Not to guests, not to admins.
+**Resolved 2026-08-27.** Email notifications now exist for the four events that matter most:
+guest confirmation and admin alert on `POST /bookings`, approved/declined on the vote that
+resolves a booking, and a cancellation confirmation. Built on Resend; see
+`docs/API_DOCUMENTATION.md`'s "Email Notifications" section for the full mechanism (best-effort,
+sent after each write's transaction commits, never allowed to affect the response).
 
-**Why.** Explicitly out of scope — `PRD.md` §4.
+**What this fixes.** The original problem — a guest hears nothing back, and the two-admin
+approval mechanism depended entirely on somebody opening the admin panel and noticing — is now
+addressed: every active admin gets an email the moment a request arrives, and the guest gets one
+at every status change that matters to them.
 
-**The trade-off — this is the largest operational risk in the system.** A guest submits a
-booking request and hears nothing back. Two admins must then approve it without anything telling
-them it arrived. The whole approval mechanism depends on somebody opening the admin panel and
-looking.
+**What is still NOT covered, deliberately:**
+- **SMS/WhatsApp.** Still explicitly out of scope (`PRD.md` §4) — email only.
+- **No guest-configurable preferences.** A guest cannot opt out of these emails; there is no
+  unsubscribe mechanism. At single-property scale with transactional (not marketing) email, this
+  is an acceptable gap, not an oversight.
+- **No delivery tracking or retry.** `sendEmail()` (`src/lib/email.ts`) fires once and logs on
+  failure; there is no queue, no retry, and no record in the database of whether a given email
+  was actually delivered. A silently-bounced admin alert (e.g. a mistyped admin email) has no
+  visible symptom beyond the server log.
+- **Sending domain not yet verified.** `EMAIL_FROM` currently points at Resend's shared
+  `onboarding@resend.dev` test sender rather than a domain the property owns — functional, but
+  guests see a generic address. See `.env.example`'s comment for the swap-over steps once a
+  domain is verified.
+- **Template copy lives in code, not the admin panel.** Unlike DefaultNotes (Slice 11), the
+  wording in `src/lib/email-templates.ts` can only be changed by editing the file and
+  redeploying — there is no admin-editable equivalent yet, by design for now (see
+  `API_DOCUMENTATION.md`'s note on this).
 
-**Revisit when:** a booking sits unapproved long enough to lose it, or guests start phoning to
-ask whether their request went through. That is the signal. Adding guest confirmation email
-alone would remove most of the pain.
+**Revisit when:** an admin alert email demonstrably fails to arrive and nobody notices for a
+while (points at needing delivery tracking), a second sign-in/contact channel is wanted
+(SMS/WhatsApp), or template copy needs to change often enough that code deploys for wording edits
+becomes a real friction point (points at an admin-editable template system).
 
 ---
 

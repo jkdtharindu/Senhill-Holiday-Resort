@@ -162,6 +162,47 @@
       via `javascript_tool` for those two buttons only. Everything else (navigation, the
       bookings-filter form, admin sign-in) clicked normally through the standard tool. Noted here
       in case it recurs on the same components.
+      Slice 15 done (2026-08-27): three pieces of owner-requested work built in one session with
+      Sonnet 5, no exception.
+      **(a) DayMode clearing.** Admins could set a date to `room_mode`/`villa_mode` and switch
+      between the two, but never unset one back to "not bookable" — needed for renovations or
+      special closures. Added `planDayModeClearings()`/`clearDayModePlan()` (`src/lib/day-mode.ts`,
+      `src/lib/day-mode-service.ts`) mirroring the existing switch-block logic: a date with an
+      active booking under its current mode cannot be cleared, same rule as a mode switch. New
+      `DELETE /api/calendar/day-mode` endpoint; admin UI gained a "Clear mode" option
+      (`day-mode-controls.tsx`). Deletion doesn't stamp `set_by` (there is no row left to stamp,
+      and day_modes has no audit log of its own), so `clearDayModePlan` deliberately takes no
+      adminId.
+      **(b) Email notifications (Resend).** The single largest item on `MAINTENANCE.md`'s watch
+      list (§5 — "no notifications of any kind") resolved. Guest confirmation + admin alert on
+      `POST /bookings`; approved/declined on the vote that resolves a booking; a cancellation
+      confirmation. `src/lib/email.ts` wraps Resend and never throws — every call site fires the
+      notification only after its write transaction has committed
+      (`void notifyXxx(...).catch(...)` following `await db.transaction(...)`), so mail latency or
+      failure can never affect whether a booking/vote/cancellation succeeds. Templates
+      (`src/lib/email-templates.ts`) are plain functions sharing one HTML shell, deliberately kept
+      as code — owner asked for them to stay editable "as templates for the future" rather than
+      building an admin-editable system nobody asked for yet.
+      **(c) Contact page.** New public `/contact` (`src/app/(guest)/contact/page.tsx`): phone
+      numbers, email addresses, and a key-free Google Maps embed built from
+      `src/lib/contact-info.ts`'s `CONTACT_INFO` — the same constant the email templates' footer
+      reads, so the two surfaces cannot drift apart. Carries a warning notice asking guests to
+      call ahead and confirm the final approach road rather than trust the embedded map's routing
+      — owner-specified, to guard against "map hallucination" on a rural access road.
+      **Session note:** partway through, discovered that an earlier `git checkout` in this same
+      session (done to keep an unrelated commit clean) had discarded *uncommitted* documentation
+      for the 2026-08-26 booking-cancellation feature — the code for that feature was already
+      committed, but its `MEMORY.md` entry, `PRD.md` FR6a supersede note, and
+      `DATABASE_SCHEMA.md` schema rows had not been. Reconstructed from the diff read earlier in
+      the same session and restored before adding this slice's own doc updates on top.
+      Verified: production build succeeds; `npm run lint` clean (two pre-existing errors from
+      part (a) fixed — an unescaped quote pair and an unused `adminId` parameter left over from
+      earlier in the session); all 211 unit tests pass; `/contact` browser-verified against a live
+      dev server (nav link, both phone numbers as `tel:` links, both emails as `mailto:` links,
+      address, warning notice, and the map iframe all rendered correctly; no console errors).
+      Email sending itself was not live-verified end-to-end (would require a real Resend send and
+      a real inbox check) — the code path, best-effort error handling, and fire-after-commit
+      ordering were verified by reading and typechecking, not by watching a real email arrive.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

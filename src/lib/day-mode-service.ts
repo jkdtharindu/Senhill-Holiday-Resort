@@ -102,11 +102,11 @@ export async function applyDayModePlan(
  *
  * Similar to applyDayModePlan but for deletion: checks for active bookings and
  * reports which dates were cleared, which were blocked, and which were already unset.
+ * Takes no adminId — unlike a mode write, a delete leaves no row to stamp
+ * `set_by` on, and day_modes has no separate audit log of its own to record
+ * who cleared a date.
  */
-export async function clearDayModePlan(
-  dates: DateOnly[],
-  adminId: string,
-): Promise<DayModePlanResult> {
+export async function clearDayModePlan(dates: DateOnly[]): Promise<DayModePlanResult> {
   if (dates.length === 0) {
     return { updated: [], blocked: [] };
   }

@@ -51,6 +51,7 @@ export function SiteHeader({ customer }: SiteHeaderProps) {
           </NavLink>
           <NavLink href="/rooms">Rooms &amp; villa</NavLink>
           <NavLink href="/calendar">Calendar</NavLink>
+          <NavLink href="/contact">Contact</NavLink>
           {customer !== null && <NavLink href="/my-bookings">My bookings</NavLink>}
         </nav>
 

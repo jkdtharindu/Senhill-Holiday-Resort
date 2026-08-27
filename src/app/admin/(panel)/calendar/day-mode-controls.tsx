@@ -245,7 +245,7 @@ export function DayModeControls({
       <p className="text-xs leading-relaxed text-stone-500 dark:text-stone-500">
         Dates you never set stay closed to bookings — there is no default mode.
         Opening a date is a deliberate act, so an unset date can never be sold
-        by accident. Use "Clear mode" to close previously open dates (e.g., for
+        by accident. Use &quot;Clear mode&quot; to close previously open dates (e.g., for
         renovations or special closures) — if no active bookings conflict, the
         dates will revert to closed.
       </p>

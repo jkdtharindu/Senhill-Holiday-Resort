@@ -156,7 +156,7 @@ export async function DELETE(request: NextRequest): Promise<Response> {
   }
 
   const dates = normalizeDates(parsed.data.dates as DateOnly[]);
-  const result = await clearDayModePlan(dates, auth.admin.id);
+  const result = await clearDayModePlan(dates);
 
   return Response.json(result);
 }

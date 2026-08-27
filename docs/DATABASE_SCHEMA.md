@@ -106,11 +106,14 @@ field add.)*
 | check_in | date | |
 | check_out | date | |
 | guests_count | integer | |
-| status | text | `reserved` \| `booked` \| `declined` — see UBIQUITOUS_LANGUAGE.md |
+| status | text | `reserved` \| `booked` \| `declined` \| `cancelled` — see UBIQUITOUS_LANGUAGE.md |
 | payment_stage | text | `unpaid` \| `advance_paid` \| `fully_paid` \| `refunded` |
 | advance_amount | numeric | |
 | advance_paid_date | date | |
 | internal_notes | text | admin-only |
+| cancelled_at | timestamptz | null until cancelled; check constraint ties it to `status = 'cancelled'` |
+| cancelled_by | uuid | FK → admin_users, nullable; NULL means the guest withdrew their own `reserved` booking |
+| cancellation_reason | text | nullable |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 

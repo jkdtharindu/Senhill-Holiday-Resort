@@ -49,3 +49,44 @@ URL query parameters (`?status=reserved&from=2026-09-10`) are passed as function
 - Admin login fails despite correct credentials — found that `npm run db:seed` had already run and skipped the super admin (idempotent). Verified admin account existed in database and password hash was correct. Login works. ✅
 
 ---
+
+## 2026-08-26: Booking cancellation — asymmetric admin/guest rule, `cancelled` as a fourth terminal status
+
+**Decision:** Add `cancelled` to `booking_status` (alongside `reserved`/`booked`/`declined`), with a
+new `cancelledAt`/`cancelledBy`/`cancellationReason` on `bookings`. An admin may cancel any live
+booking (`reserved` or `booked`); a guest may only withdraw their OWN booking, and only while it is
+still `reserved`. Both actions are immediate — no ApprovalVote — and no refund is calculated by the
+system.
+
+**Why:** The two-admin approval rule exists to stop a date being *held* carelessly; releasing a hold
+is the safe direction, so it doesn't need the same gate. A `booked` stay usually has an advance
+payment arranged offline, so ending one needs a human (an admin) who can also arrange the refund —
+hence the guest's self-service withdrawal stops at `reserved`. Pricing/refunds are out of scope
+(PRD §4): calculating a refund from `advance_amount` would describe the deposit, not the stay, while
+reading as authoritative. `cancelled` is kept distinct from `declined` for the audit trail — "we
+said no" (decline, on an unconfirmed request) and "it was called off" (cancel, on something already
+accepted, or withdrawn by the guest) are different facts about the same date. No date-recovery code
+was needed: every date-blocking query already names what blocks by allowlist
+(`inArray(status, [...])`) rather than excluding `declined`, so a cancelled booking drops out the
+moment its status changes.
+
+**Migration detail:** the check constraint tying `cancelled_at` to `status = 'cancelled'` compares
+`status::text`, not the enum value directly. Drizzle runs all pending migrations in one transaction,
+and Postgres refuses to evaluate an enum value added earlier in that same transaction when
+validating a constraint against the already-populated table — the text cast avoids referencing the
+new member and lets the migration apply cleanly.
+
+**Rejected alternatives:**
+1. Let a guest cancel a `booked` stay too — rejected because a confirmed booking commonly has money
+   already collected offline; an admin needs to be in the loop to arrange the refund.
+2. Compute and store a refund amount automatically — rejected as out of scope; pricing logic isn't
+   part of this build (PRD §4), and a computed number would look authoritative without being one.
+3. Reuse `declined` for guest-withdrawn/admin-cancelled bookings instead of adding a new status —
+   rejected because it collapses two different facts ("never accepted" vs "accepted, then undone")
+   into one audit-trail value.
+
+**Revisit when:** Refunds or pricing enter scope — at that point `cancellation_reason` and
+`payment_stage` may need to interact (e.g. auto-suggesting a refund amount), which they deliberately
+do not today.
+
+---

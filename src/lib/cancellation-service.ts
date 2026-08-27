@@ -32,7 +32,7 @@
 import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { bookingAuditLog, bookings, type BookingStatus } from "@/db/schema";
+import { bookableItems, bookingAuditLog, bookings, type BookingStatus } from "@/db/schema";
 import {
   actorAuditName,
   decideCancellation,
@@ -41,6 +41,8 @@ import {
   type CancelActor,
   type CancelRefusal,
 } from "./cancellation";
+import { sendEmail } from "./email";
+import { bookingCancelledEmail } from "./email-templates";
 
 export interface CancelBookingInput {
   bookingId: string;
@@ -68,13 +70,20 @@ export async function cancelBooking(
   input: CancelBookingInput,
 ): Promise<CancelBookingResult> {
   const audience = input.actor.kind === "admin" ? "admin" : "guest";
+  let notification: CancellationNotification | null = null;
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<CancelBookingResult> => {
     const [booking] = await tx
       .select({
         id: bookings.id,
         status: bookings.status,
         customerId: bookings.customerId,
+        bookableItemId: bookings.bookableItemId,
+        guestName: bookings.guestName,
+        email: bookings.email,
+        checkIn: bookings.checkIn,
+        checkOut: bookings.checkOut,
+        guestsCount: bookings.guestsCount,
       })
       .from(bookings)
       .where(eq(bookings.id, input.bookingId))
@@ -147,6 +156,16 @@ export async function cancelBooking(
       },
     ]);
 
+    notification = {
+      bookableItemId: booking.bookableItemId,
+      guestName: booking.guestName,
+      email: booking.email,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      guestsCount: booking.guestsCount,
+      cancelledByGuestSelf: input.actor.kind === "guest",
+    };
+
     return {
       ok: true as const,
       previousStatus: booking.status,
@@ -155,5 +174,51 @@ export async function cancelBooking(
       cancelledAt: updated?.cancelledAt ?? new Date(),
       reason: input.reason,
     };
+  });
+
+  // Fired only after the cancellation actually committed — same reasoning
+  // as booking-service.ts and vote-service.ts: mail latency or failure must
+  // never affect whether the cancellation itself succeeds.
+  if (result.ok && notification) {
+    void notifyBookingCancelled(notification).catch((err: unknown) => {
+      console.error("[cancellation-service] notifyBookingCancelled failed:", err);
+    });
+  }
+
+  return result;
+}
+
+interface CancellationNotification {
+  bookableItemId: string;
+  guestName: string;
+  email: string;
+  checkIn: string;
+  checkOut: string;
+  guestsCount: number;
+  cancelledByGuestSelf: boolean;
+}
+
+async function notifyBookingCancelled(input: CancellationNotification): Promise<void> {
+  const [item] = await db
+    .select({ name: bookableItems.name })
+    .from(bookableItems)
+    .where(eq(bookableItems.id, input.bookableItemId))
+    .limit(1);
+  const itemName = item?.name ?? "your booking";
+
+  const content = bookingCancelledEmail({
+    guestName: input.guestName,
+    itemName,
+    checkIn: input.checkIn,
+    checkOut: input.checkOut,
+    guestsCount: input.guestsCount,
+    cancelledByGuestSelf: input.cancelledByGuestSelf,
+  });
+
+  await sendEmail({
+    to: input.email,
+    subject: content.subject,
+    html: content.html,
+    text: content.text,
   });
 }

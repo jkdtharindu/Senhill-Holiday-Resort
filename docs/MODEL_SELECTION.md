@@ -42,6 +42,14 @@ No model checks needed — already shipped.
   pursued further as a code fix; a separate question about payment-gating the approval status
   was resolved by confirming the rule stays as built. Outcome: query verified live against the
   real dataset, production build succeeds.
+- **Slice 15** (DayMode clearing + email notifications + contact page, 2026-08-27) used
+  **Sonnet 5**, as assessed at the start of the work (established integration patterns —
+  Resend's documented SDK, existing fetch-write-service architecture to extend, routine UI —
+  not the kind of open-ended multi-constraint reasoning that would call for Opus 5). No
+  exception. Outcome: production build succeeds, lint clean, all 211 unit tests pass, the
+  `/contact` page browser-verified against a live dev server with no console errors. Also fixed
+  along the way: two lint errors (unescaped quotes, an unused parameter) left over from the
+  DayMode-clearing half of this session's work.
 
 See `docs/tasks.md` for the full verification log for each.
 

@@ -276,6 +276,12 @@ thorough — 23 unit tests plus a live-database pass exercising every conflict-r
 specifically because this is the multi-constraint validation MODEL_SELECTION.md flagged as
 highest-risk.
 
+**Added 2026-08-27 — email notifications (Resend).** On success, two emails are sent
+best-effort after the transaction commits: a confirmation to the guest (`booking.email`) and an
+alert to every *active* admin, naming the guest, item, dates, phone and email so an admin can act
+without opening the panel first. See "Email Notifications" below for the shared mechanism and why
+a mail failure never affects this endpoint's response.
+
 ### `GET /bookings/my` — customer — **not built, by decision (Slice 12)**
 ### `GET /bookings` — admin — **not built, by decision (Slice 12)**
 ### `GET /bookings/:id` — admin — **not built, by decision (Slice 12)**
@@ -369,6 +375,11 @@ one). Not incorrect, just heavier than needed for a straightforward state-machin
 Logged per the exception protocol in MODEL_SELECTION.md so both directions get treated the
 same way.
 
+**Added 2026-08-27 — email notifications (Resend).** When this vote is the one that resolves
+the booking (the 2nd distinct `approve`, or any `decline`), the guest gets an "approved"/"declined"
+email after the transaction commits. A vote that does not resolve the booking (e.g. the first of
+two approvals) sends nothing — it is not guest-visible news yet. See "Email Notifications" below.
+
 ### `POST /bookings/:id/cancel` — admin, or the booking's own customer — as built, done
 Cancel a booking. Terminal and immediate: there is no un-cancel, and no ApprovalVote is
 required. The two-admin rule exists to stop a date being *held* carelessly; releasing one is
@@ -446,6 +457,14 @@ overwriting the first one's record of who cancelled and why.
 `changed_by` is null for a guest withdrawal, with `changed_by_name` recorded as
 `"Guest (self-service)"` so the history still reads correctly.
 
+**Added 2026-08-27 — email notifications (Resend).** After the cancellation commits, the guest
+gets a confirmation email at `booking.email`, worded slightly differently depending on who acted
+("your booking has been withdrawn, as you requested" for a guest self-cancel vs. "your booking has
+been cancelled" for an admin-initiated one) — see `bookingCancelledEmail` in
+`src/lib/email-templates.ts`. No separate refund amount appears in the email; it only notes that
+a refund, if one applies, will be handled separately, matching the "no refund calculated" rule
+above. See "Email Notifications" below.
+
 ### `PUT /bookings/:id` — admin — as built, done
 Comprehensive update: `guestName`, `phone` (compulsory, cannot be blanked), `email`,
 `paymentStage` (`unpaid`\|`advance_paid`\|`fully_paid`\|`refunded`), `advanceAmount`,
@@ -481,6 +500,54 @@ stage, advance amount, advance paid date, internal notes) persisted correctly an
 one `booking_audit_log` row per changed field with correct old/new values and the admin's
 denormalized name; `status` and every untouched field were left unchanged. All test data removed
 afterward.
+
+---
+
+## Email Notifications
+
+**Added 2026-08-27.** Not a separate API endpoint — a side effect of three existing booking
+routes, sent via [Resend](https://resend.com). Documented once here rather than repeated per
+route; each route above links back to this section for the specifics of when it fires.
+
+**Events covered** (`src/lib/email-templates.ts` — one function per event, sharing a common HTML
+shell so a branding change is one edit):
+| Event | Trigger | Recipient(s) |
+|---|---|---|
+| Booking confirmation | `POST /bookings` succeeds | the guest |
+| New-booking alert | `POST /bookings` succeeds | every **active** admin (`adminUsers.active = true`) |
+| Approved | a vote resolves a booking to `booked` | the guest |
+| Declined | a vote resolves a booking to `declined` | the guest |
+| Cancelled | `POST /bookings/:id/cancel` succeeds | the guest |
+
+**Best-effort, never blocking.** `src/lib/email.ts`'s `sendEmail()` catches its own errors —
+a missing `RESEND_API_KEY`, a Resend API error, a network failure — and only logs them; it never
+throws. Every call site fires the email **after** its write transaction has already committed
+(`void notifyXxx(...).catch(...)` following the `await db.transaction(...)`, not inside it), so a
+slow or failing mail provider can never turn a successful booking/vote/cancellation into an error
+response, and never holds a `SELECT ... FOR UPDATE` row lock open waiting on a network call.
+
+**Recipients:** `src/lib/notification-recipients.ts`'s `getActiveAdminEmails()` is the single
+query deciding who gets an admin alert — a deactivated admin is excluded, since they can no
+longer act on it anyway. If that list is ever empty (mid-transition between admins), the guest's
+own confirmation still sends; a missing admin alert is a visibility gap, not a reason to fail the
+booking.
+
+**Sending domain.** `EMAIL_FROM` (env var) controls the `From:` address. Until a custom domain is
+verified in Resend, it is set to Resend's own `onboarding@resend.dev` test sender — functional,
+but guests see a generic address rather than the property's own domain. Once a domain is verified
+in the Resend dashboard, update `EMAIL_FROM` in both `.env.local` and Vercel's project settings;
+no code change needed.
+
+**Cost.** Resend's free tier (100 emails/day, 3,000/month) covers this property's expected volume
+by a wide margin — a booking generates at most 2 emails (guest + admin alert), and even 50
+bookings/month stays well under the free tier. See `docs/MAINTENANCE.md` §5 for the fuller
+trade-off discussion (SMS/WhatsApp still out of scope, no guest-configurable preferences).
+
+**Templates as a starting point, not a final admin-editable system.** The owner asked for these
+to remain editable "as templates for the future" — today that means editing the plain functions in
+`email-templates.ts` directly. If per-event admin-editable copy is wanted later (mirroring
+DefaultNotes' pattern, Slice 11), treat this file's current wording as the seed content for that,
+not as a system to build from scratch.
 
 ---
 
@@ -529,6 +596,22 @@ Verified against the live database: unauthenticated → 401; empty `{}` body →
 blank `defaultNotes` → 400 with clear message; a real update → `changed: true` and persisted
 correctly; `GET` immediately sees the new value; re-PUTting the same value → `changed: false`.
 No audit log per the schema — only the `updated_by` and `updated_at` fields track history.
+
+---
+
+## Contact page
+
+**Added 2026-08-27.** `/contact` — a static guest-facing page, not an API endpoint (no route to
+document here). Phone numbers, email addresses and the property address come from
+`src/lib/contact-info.ts`'s `CONTACT_INFO` constant — the single source of truth shared with the
+email templates' footer, so the two surfaces cannot drift apart.
+
+Includes a Google Maps embed (the key-free `/maps?...&output=embed` iframe form, not the
+JavaScript Maps SDK) built from `CONTACT_INFO.mapQuery`, plus a warning notice: **guests are told
+to call ahead and confirm the final approach road** rather than trust the embedded map's
+turn-by-turn routing. This exists because consumer map data for a rural resort access road is
+exactly the kind of detail that goes stale or wrong — the notice is a deliberate hedge against
+"map hallucination" sending a guest down the wrong road on arrival, not a general disclaimer.
 
 ---
 

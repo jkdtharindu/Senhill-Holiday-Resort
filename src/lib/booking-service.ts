@@ -25,6 +25,9 @@ import {
   type BookingConflict,
   type BookingItemInfo,
 } from "./booking";
+import { sendEmail } from "./email";
+import { adminNewBookingAlertEmail, bookingConfirmationEmail } from "./email-templates";
+import { getActiveAdminEmails } from "./notification-recipients";
 
 /** Anything with drizzle's `.select()` — either the pooled `db` or a transaction handle. */
 type Queryable = Pick<typeof db, "select">;
@@ -134,7 +137,7 @@ export async function createBooking(
     return { ok: false, error: firstPass.error, conflictingDates: firstPass.conflictingDates };
   }
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<CreateBookingResult> => {
     const revalidated = await fetchAndValidate(tx, input, window);
     if (!revalidated.ok) {
       return { ok: false, error: revalidated.error, conflictingDates: revalidated.conflictingDates };
@@ -155,6 +158,62 @@ export async function createBooking(
       })
       .returning();
 
-    return { ok: true, booking: created };
+    return { ok: true as const, booking: created };
+  });
+
+  // Notifications are sent AFTER the transaction commits, and never allowed
+  // to change the result — a slow or failing mail provider must not turn a
+  // successful booking into an error response. sendEmail already swallows
+  // its own failures (lib/email.ts); this only adds "don't let a lookup
+  // error here propagate either."
+  if (result.ok) {
+    void notifyBookingCreated(result.booking).catch((err: unknown) => {
+      console.error("[booking-service] notifyBookingCreated failed:", err);
+    });
+  }
+
+  return result;
+}
+
+/** Guest confirmation + admin alert for a newly created booking. */
+async function notifyBookingCreated(booking: Booking): Promise<void> {
+  const [item] = await db
+    .select({ name: bookableItems.name })
+    .from(bookableItems)
+    .where(eq(bookableItems.id, booking.bookableItemId))
+    .limit(1);
+  const itemName = item?.name ?? "your booking";
+
+  const details = {
+    guestName: booking.guestName,
+    itemName,
+    checkIn: booking.checkIn,
+    checkOut: booking.checkOut,
+    guestsCount: booking.guestsCount,
+  };
+
+  const confirmation = bookingConfirmationEmail(details);
+  await sendEmail({
+    to: booking.email,
+    subject: confirmation.subject,
+    html: confirmation.html,
+    text: confirmation.text,
+  });
+
+  const adminEmails = await getActiveAdminEmails();
+  if (adminEmails.length === 0) return;
+
+  const alert = adminNewBookingAlertEmail({
+    ...details,
+    bookingId: booking.id,
+    phone: booking.phone,
+    email: booking.email,
+  });
+  await sendEmail({
+    to: adminEmails,
+    subject: alert.subject,
+    html: alert.html,
+    text: alert.text,
+    replyTo: booking.email,
   });
 }
