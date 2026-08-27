@@ -90,3 +90,46 @@ new member and lets the migration apply cleanly.
 do not today.
 
 ---
+
+## 2026-08-27: Fire-and-forget promises do not survive Vercel serverless — use `after()`
+
+**The bug:** Email notifications were built (2026-08-27) firing as `void notifyXxx(...).catch(...)`
+immediately after each write transaction committed. This worked locally and passed every check —
+build, typecheck, lint, 211 unit tests — but in production **not a single email was ever sent**.
+Zero entries in Resend's own logs, so the app was never reaching the API at all.
+
+**Cause:** On Vercel's serverless runtime, a function's execution can be frozen or torn down the
+moment the HTTP response is sent. An unawaited promise still in flight at that point may simply
+never finish. The booking committed (that was awaited); the email send never ran.
+
+**Fix:** `after()` from `next/server`, which wraps Vercel's `waitUntil` and keeps the invocation
+alive until the callback settles — without delaying the response. Applied in all three call sites:
+`booking-service.ts`, `vote-service.ts`, `cancellation-service.ts`.
+
+**Why this was invisible for so long — the real lesson.** Three separate things each hid it:
+1. **`sendEmail()` swallows its own errors by design** (so mail failure can't break a booking).
+   Correct, but it means a total failure produces no signal anyone sees.
+2. **Local dev doesn't reproduce it.** A long-lived Node process happily finishes stray promises;
+   only the serverless freeze exposes the bug. Passing locally proved nothing about production.
+3. **No record of send attempts exists**, so "did it even try?" was unanswerable without
+   instrumenting it by hand.
+
+**Rejected alternatives:**
+1. `await` the send inside the request — rejected: makes every booking wait on a third-party API,
+   and a Resend outage would slow or fail bookings. The whole point was decoupling.
+2. Send inside the transaction — rejected for the same reason plus it holds a
+   `SELECT ... FOR UPDATE` row lock open across a network call.
+3. A job queue — rejected as far too much machinery for a handful of emails a week.
+
+**Also corrected the same day:** I misread the `x-resend-daily-quota: 1` response header as
+"this account is capped at 1 email/day" and briefly told the owner domain verification was
+blocking sends. It is a **usage counter**, not a limit — two consecutive test emails both sent and
+delivered. Resend's free tier is 100/day, 3,000/month as originally documented. Don't re-derive an
+account limit from that header.
+
+**Revisit when:** any new background work is added after a response (webhooks, analytics, cleanup).
+The rule is `after()`, never a bare `void promise`. Also worth revisiting once an `email_log`
+table exists — the owner asked on 2026-08-27 about alerting on unusual daily volume, and the same
+table would close the "no record of send attempts" gap that made this bug invisible.
+
+---

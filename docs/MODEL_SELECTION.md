@@ -51,6 +51,20 @@ No model checks needed — already shipped.
   along the way: two lint errors (unescaped quotes, an unused parameter) left over from the
   DayMode-clearing half of this session's work.
 
+  > **⚠️ EXCEPTION LOGGED — 2026-08-27 (over-spec).** The owner switched to **Opus 5** partway
+  > through, during the follow-up fix to Slice 15's email bug (see below). Heavier than this file
+  > would recommend for a single-cause bugfix, and — as with Slice 9's over-spec exception — no
+  > verification adjustment was needed; an over-spec model is not a risk the way an under-spec one
+  > is. Standing recommendation for work on this module stays Sonnet 5.
+
+  **Follow-up fix, same day (Opus 5):** the email feature shipped in this slice sent **zero**
+  emails in production despite passing every local check. Cause was a serverless lifecycle bug,
+  not a logic error — fire-and-forget promises being killed when Vercel freezes the function on
+  response. Fixed with `after()` from `next/server`. Verified this time by an actual live send
+  through the real Resend API (two emails confirmed received by the owner), not just by a green
+  build — the original mistake was treating "build + tests pass" as evidence about a runtime
+  behaviour neither one exercises. See `MEMORY.md` (2026-08-27) for the post-mortem.
+
 See `docs/tasks.md` for the full verification log for each.
 
 ---

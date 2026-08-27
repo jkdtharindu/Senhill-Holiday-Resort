@@ -115,6 +115,20 @@ at every status change that matters to them.
   failure; there is no queue, no retry, and no record in the database of whether a given email
   was actually delivered. A silently-bounced admin alert (e.g. a mistyped admin email) has no
   visible symptom beyond the server log.
+
+  **This is not hypothetical — it already bit once.** On the day this feature shipped it sent
+  zero emails in production, and the swallowed-errors design meant there was no signal anywhere
+  until someone thought to check Resend's dashboard by hand (see `MEMORY.md`, 2026-08-27). The
+  underlying send bug is fixed; the *invisibility* that let it go unnoticed is not.
+
+  An `email_log` table (one row per send attempt: event, recipient, outcome, timestamp) would
+  close this and the volume-alerting gap below in one change. Discussed with the owner
+  2026-08-27, not yet built.
+- **No volume alerting.** Nothing warns if email volume spikes. Worth sizing correctly if built:
+  with 3 rooms and a villa, ~2 emails per booking, a genuine day's traffic is single digits —
+  100 emails/day (the plan cap) is not reachable by real bookings, so a spike means a bug or
+  abuse. An alert threshold therefore belongs well below the cap (~30–50/day), not at it, and
+  any alert-by-email needs a once-per-day guard so it cannot feed the very spike it reports.
 - **Sending domain not yet verified.** `EMAIL_FROM` currently points at Resend's shared
   `onboarding@resend.dev` test sender rather than a domain the property owns — functional, but
   guests see a generic address. See `.env.example`'s comment for the swap-over steps once a

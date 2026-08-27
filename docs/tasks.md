@@ -203,6 +203,35 @@
       Email sending itself was not live-verified end-to-end (would require a real Resend send and
       a real inbox check) — the code path, best-effort error handling, and fire-after-commit
       ordering were verified by reading and typechecking, not by watching a real email arrive.
+      **That gap turned out to matter — see the follow-up below.**
+      Slice 15 follow-up (2026-08-27, Opus 5 — over-spec exception, logged in MODEL_SELECTION.md):
+      **the email feature as shipped sent zero emails in production.** The owner added the Resend
+      env vars to Vercel, redeployed, submitted a real booking — the booking succeeded, but no
+      email arrived and, tellingly, Resend's own logs showed no send attempt at all, meaning the
+      app never reached the API.
+      Cause: `void notifyXxx(...).catch(...)` fire-and-forget. Vercel's serverless runtime can
+      freeze a function the moment its response is sent, so an unawaited promise still in flight
+      may never run. The awaited transaction committed; the un-awaited send did not. Checked
+      `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/after.md` per AGENTS.md
+      rather than assuming the API from memory, then switched all three call sites
+      (`booking-service.ts`, `vote-service.ts`, `cancellation-service.ts`) to `after()` from
+      `next/server`, which wraps Vercel's `waitUntil` and keeps the invocation alive until the
+      callback settles without delaying the response.
+      **Verified properly this time:** rather than stopping at a green build, sent a real email
+      through the live Resend API using the actual template module, then confirmed against the raw
+      unfiltered API response (`error: null`, real message id) — and the owner confirmed both test
+      emails arrived. The original failure was precisely a case of build/typecheck/tests all
+      passing while proving nothing about the runtime behaviour that was broken.
+      Two further corrections made in the same pass:
+      (1) `sendEmail()` swallowing its own errors by design (correct, so mail can't break a
+      booking) means a total failure produces no signal anyone sees — recorded as a known gap,
+      with an `email_log` table proposed to close it alongside the volume alerting the owner asked
+      about. Not built yet.
+      (2) I misread Resend's `x-resend-daily-quota: 1` header as an account cap and briefly told
+      the owner their account was restricted to 1 email/day and that domain verification was
+      blocking sends. Wrong on both counts — it is a usage counter, the published free tier
+      (100/day, 3,000/month) applies as originally documented, and both test emails sent fine.
+      Corrected in `API_DOCUMENTATION.md` with an explicit note so the header is not misread again.
 
 ## Next To Do ○ (suggested build order — vertical slices)
 

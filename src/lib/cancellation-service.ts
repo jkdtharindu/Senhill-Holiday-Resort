@@ -30,6 +30,7 @@
  */
 
 import { eq, sql } from "drizzle-orm";
+import { after } from "next/server";
 
 import { db } from "@/db";
 import { bookableItems, bookingAuditLog, bookings, type BookingStatus } from "@/db/schema";
@@ -178,11 +179,18 @@ export async function cancelBooking(
 
   // Fired only after the cancellation actually committed — same reasoning
   // as booking-service.ts and vote-service.ts: mail latency or failure must
-  // never affect whether the cancellation itself succeeds.
+  // never affect whether the cancellation itself succeeds. Uses `after()`,
+  // not a bare fire-and-forget promise — see the comment in
+  // booking-service.ts's `createBooking` for why: Vercel's serverless
+  // runtime can freeze a function's execution once the response is sent,
+  // and an unawaited promise left running past that point may never finish.
   if (result.ok && notification) {
-    void notifyBookingCancelled(notification).catch((err: unknown) => {
-      console.error("[cancellation-service] notifyBookingCancelled failed:", err);
-    });
+    const toSend = notification;
+    after(() =>
+      notifyBookingCancelled(toSend).catch((err: unknown) => {
+        console.error("[cancellation-service] notifyBookingCancelled failed:", err);
+      }),
+    );
   }
 
   return result;

@@ -521,10 +521,17 @@ shell so a branding change is one edit):
 
 **Best-effort, never blocking.** `src/lib/email.ts`'s `sendEmail()` catches its own errors —
 a missing `RESEND_API_KEY`, a Resend API error, a network failure — and only logs them; it never
-throws. Every call site fires the email **after** its write transaction has already committed
-(`void notifyXxx(...).catch(...)` following the `await db.transaction(...)`, not inside it), so a
+throws. Every call site fires the email **after** its write transaction has already committed, so a
 slow or failing mail provider can never turn a successful booking/vote/cancellation into an error
 response, and never holds a `SELECT ... FOR UPDATE` row lock open waiting on a network call.
+
+**Scheduled with `after()` from `next/server` — never a bare `void promise`.** This is
+load-bearing, not stylistic. The first version of this feature used
+`void notifyXxx(...).catch(...)` and sent **zero** emails in production while working perfectly
+locally: Vercel's serverless runtime can freeze a function the instant its response is sent, and an
+unawaited promise still in flight then may never run. `after()` wraps Vercel's `waitUntil` to keep
+the invocation alive until the callback settles, without delaying the response. Do not "simplify"
+these back to fire-and-forget. See `MEMORY.md` (2026-08-27 entry) for the full post-mortem.
 
 **Recipients:** `src/lib/notification-recipients.ts`'s `getActiveAdminEmails()` is the single
 query deciding who gets an admin alert — a deactivated admin is excluded, since they can no
@@ -542,6 +549,18 @@ no code change needed.
 by a wide margin — a booking generates at most 2 emails (guest + admin alert), and even 50
 bookings/month stays well under the free tier. See `docs/MAINTENANCE.md` §5 for the fuller
 trade-off discussion (SMS/WhatsApp still out of scope, no guest-configurable preferences).
+
+> **Reading Resend's response headers:** `x-resend-daily-quota` / `x-resend-monthly-quota` are
+> **usage counters**, not limits. A fresh account returning `x-resend-daily-quota: 1` has sent one
+> email today — it is *not* capped at one. This was misread once during the 2026-08-27 build and
+> briefly mistaken for an account restriction; the plan limits are the published ones above.
+
+**Volume monitoring — not built.** There is currently no record of send attempts anywhere, so
+neither "how many went out today" nor "did any fail" is answerable without adding instrumentation.
+An `email_log` table was discussed on 2026-08-27 (owner asked about alerting on unusual daily
+volume) and would close both gaps at once. Worth noting for scale: at 3 rooms + a villa, 100 emails
+in one day is not achievable by legitimate bookings — such a spike would indicate a bug or abuse,
+so a useful alert threshold sits far below the plan cap (~30–50/day), not at it.
 
 **Templates as a starting point, not a final admin-editable system.** The owner asked for these
 to remain editable "as templates for the future" — today that means editing the plain functions in

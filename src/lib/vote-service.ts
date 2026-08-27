@@ -18,6 +18,7 @@
  */
 
 import { and, eq, gt, lte, ne, sql } from "drizzle-orm";
+import { after } from "next/server";
 
 import { db } from "@/db";
 import {
@@ -228,10 +229,16 @@ export async function castVote(input: CastVoteInput): Promise<CastVoteResult> {
     };
   });
 
+  // See booking-service.ts's `createBooking` for why this is `after(...)`
+  // rather than a bare fire-and-forget promise — the latter can be killed by
+  // Vercel's serverless runtime before it finishes, once the response is sent.
   if (notification) {
-    void notifyVoteResolved(notification).catch((err: unknown) => {
-      console.error("[vote-service] notifyVoteResolved failed:", err);
-    });
+    const toSend = notification;
+    after(() =>
+      notifyVoteResolved(toSend).catch((err: unknown) => {
+        console.error("[vote-service] notifyVoteResolved failed:", err);
+      }),
+    );
   }
 
   return result;

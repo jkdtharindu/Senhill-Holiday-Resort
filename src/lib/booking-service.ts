@@ -16,6 +16,7 @@
  */
 
 import { and, eq, gt, inArray, lte } from "drizzle-orm";
+import { after } from "next/server";
 
 import { db } from "@/db";
 import { bookableItems, bookings, dayModes, type Booking } from "@/db/schema";
@@ -166,10 +167,20 @@ export async function createBooking(
   // successful booking into an error response. sendEmail already swallows
   // its own failures (lib/email.ts); this only adds "don't let a lookup
   // error here propagate either."
+  //
+  // Registered via next/server's `after()`, NOT a bare fire-and-forget
+  // promise. On Vercel's serverless runtime, a function's execution can be
+  // frozen the moment the HTTP response is sent — an unawaited promise left
+  // running past that point may simply never finish. `after()` uses
+  // Vercel's `waitUntil` under the hood to keep the invocation alive until
+  // its callback settles, while still not delaying the response itself.
   if (result.ok) {
-    void notifyBookingCreated(result.booking).catch((err: unknown) => {
-      console.error("[booking-service] notifyBookingCreated failed:", err);
-    });
+    const booking = result.booking;
+    after(() =>
+      notifyBookingCreated(booking).catch((err: unknown) => {
+        console.error("[booking-service] notifyBookingCreated failed:", err);
+      }),
+    );
   }
 
   return result;
