@@ -105,6 +105,21 @@
 
 ### 🔴 Immediate (Current Sprint) — New Build Order
 
+- [ ] **0. Verify a sending domain so guests actually receive email** — ⚠️ **BLOCKING FOR LAUNCH**
+  - Why: an unverified Resend account only accepts mail addressed to the account owner. Real
+    guests currently receive **nothing** — their confirmation is rejected and logged as `failed`.
+    Discovered by a real production booking on 2026-08-27, not in testing.
+  - Status: **deferred on cost, not on judgement.** The business is pre-revenue; a domain is
+    ~$12/yr and not affordable yet (owner decision, 2026-08-27). `EMAIL_RESTRICT_TO` is set in
+    Vercel as an interim so the owner at least gets alerted to new bookings.
+  - Route A (preferred): buy a domain → verify at resend.com/domains → point `EMAIL_FROM` at it
+    → **unset `EMAIL_RESTRICT_TO`**. No code change. Also retires the `*.vercel.app` address.
+  - Route B (free): switch to Gmail SMTP with an app password (500/day). Code change confined to
+    `src/lib/email.ts`; guests would see a personal Gmail address as the sender.
+  - Interim reality: staff confirm bookings by phone, which the manual-approval flow already
+    required. Two of the three admins are not being emailed and must check the panel.
+  - See `docs/MAINTENANCE.md` §5 for the full trade-off and the exact provider error.
+
 - [ ] **1. Reserve Request for Reserved Bookings** (Allow guests to re-submit for dates in `reserved` state)
   - Why: Guests should be able to request alternative dates while their original booking is pending review
   - Complexity: Medium

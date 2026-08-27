@@ -76,10 +76,20 @@ payment amount and collection happen manually, outside the system.
   admin can cancel it — a confirmed stay usually has an advance payment arranged offline, so
   ending it needs a human who can also arrange the refund. See `docs/tasks.md` (Slice 13) and
   `MEMORY.md` (2026-08-26 entry) for the full rule and rationale.
-- FR6b: **Added 2026-08-27.** The customer receives email at each status change that matters to
-  them: a confirmation when their request is submitted, an approved/declined notice when an
-  admin's vote resolves it, and a cancellation confirmation. Sent via Resend, best-effort — see
-  `docs/API_DOCUMENTATION.md`'s "Email Notifications" section.
+- FR6b: **Added 2026-08-27; currently NOT met for real guests — see below.** The customer
+  receives email at each status change that matters to them: a confirmation when their request
+  is submitted, an approved/declined notice when an admin's vote resolves it, and a cancellation
+  confirmation. Sent via Resend, best-effort — see `docs/API_DOCUMENTATION.md`'s "Email
+  Notifications" section.
+
+  **Known deviation (2026-08-27):** the Resend account has no verified sending domain, and an
+  unverified account only accepts mail addressed to the account owner. In practice this means
+  **no guest other than the property owner currently receives any of these emails** — every send
+  to a real guest is rejected by the provider and recorded as `failed`. The feature is built and
+  tested correctly; what's missing is the $12/yr domain verification step, deferred on cost per
+  owner decision (see `MEMORY.md`, 2026-08-27, and `MAINTENANCE.md` §5 for the full account).
+  Admin alerts are narrowed to one working address via `EMAIL_RESTRICT_TO` in the meantime. This
+  note should be removed once a domain is verified and this FR is genuinely met.
 - FR6c: **Added 2026-08-27.** A public `/contact` page shows the property's phone numbers, email
   addresses, and a map to its location, with a notice asking guests to call ahead and confirm the
   final approach road rather than rely solely on the embedded map's routing.

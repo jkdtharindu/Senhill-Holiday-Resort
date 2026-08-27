@@ -134,6 +134,58 @@ table would close the "no record of send attempts" gap that made this bug invisi
 
 ---
 
+## 2026-08-27: New `email_log` table — schema decision, separate from the bugs it exposed
+
+**Decision:** Add a new table, `email_log`, plus two new enums (`email_event`, `email_outcome`).
+One row per email send *attempt* — including attempts that never reach the network — recording
+`event`, `outcome`, `recipients` (comma-joined), `recipient_count`, `subject`, an optional
+`error_message`, an optional `booking_id` (FK, `ON DELETE SET NULL`), and both a resort-local
+`sent_on` date and an exact `sent_at` timestamp. Migration `0003_email_log.sql`.
+
+**Why:** `sendEmail()` (`src/lib/email.ts`) deliberately swallows its own errors — a booking must
+succeed even if the mail provider is down — but that same day, that exact design meant a total
+mail outage produced no visible signal anywhere until someone thought to check Resend's own
+dashboard by hand (see the "Fire-and-forget promises" entry above, same date). This table exists
+so that silence is observable on the app's own admin dashboard instead.
+
+Built alongside it: a volume circuit breaker (`DAILY_WARN_THRESHOLD = 30`,
+`DAILY_SEND_LIMIT = 80`, in `src/lib/email-log.ts`) sized against real capacity — 3 rooms plus a
+villa at ~2 emails per booking makes a busy day single digits, so crossing 30 already means
+something is wrong, not that business is good. The hard limit sits under Resend's own 100/day
+free-tier cap to leave headroom for sending by hand while investigating a problem.
+
+**Design decisions worth not undoing, each documented at its definition in code:**
+1. The breaker **fails open** — if the daily count can't be read, the send proceeds. A transient
+   database error silently suppressing a real guest's confirmation is judged worse than briefly
+   overshooting a self-imposed limit that already sits under the provider's.
+2. **Blocked attempts don't count** toward the daily total — only `sent` and `failed` do, since
+   only those consumed provider quota. Counting blocked ones would make the breaker
+   self-latching: once tripped, it could never untrip.
+3. `sent_on` is **stored, not derived** from `sent_at`. The daily counter has to agree with what
+   an admin means by "today" in Asia/Colombo; a UTC day boundary would disagree for part of
+   every evening.
+
+**Rejected alternatives:**
+1. A queue/job system (e.g. writing to a table a background worker drains) — rejected as far too
+   much machinery for a handful of emails a week at this property's scale.
+2. Counting send attempts in application memory rather than a table — rejected: Vercel runs many
+   short-lived serverless instances with no shared memory between them, the same reason admin
+   login rate-limiting (Slice 2) is DB-backed rather than in-process.
+3. Logging only failures, not every attempt — rejected: a `sent` count is what the volume breaker
+   and the dashboard's "N recipients emailed today" line both need, and a log that only shows
+   trouble can't tell a quiet day from a broken one.
+
+**Migration is purely additive** — two enum types, one table, three indexes, no `ALTER` on
+anything existing — so none of migration `0002`'s enum-in-transaction hazard applied. Applied to
+the live database with explicit owner approval, per `HITL.md`'s gate on non-local migrations.
+
+**Revisit when:** delivery confirmation is wanted (a `sent` row means the provider *accepted* the
+message, not that it arrived — would need Resend's webhooks), or push alerting is wanted for the
+volume warning (currently dashboard-only; deferred because an email alerting about too much email
+can feed the very spike it reports).
+
+---
+
 ## 2026-08-27: A request body may DECLINE privilege, never claim it (`actingAs: "guest"`)
 
 **The bug:** the owner could not withdraw their own pending booking from the guest

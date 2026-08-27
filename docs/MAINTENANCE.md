@@ -140,25 +140,40 @@ at every status change that matters to them.
   - **A real guest receives nothing.** Their confirmation is rejected and recorded as `failed`.
   - Admin alerts would have reached nobody, since one bad recipient fails the whole send.
 
-  **Current workaround:** `EMAIL_RESTRICT_TO` (env var) narrows admin alerts to the one
-  deliverable address, so the owner at least learns a booking arrived. Guest mail is
-  deliberately NOT redirected — sending a guest's confirmation to the owner would deliver the
-  wrong person's mail and make `email_log` misreport who was contacted.
+  **Workaround, ACTIVE in production since 2026-08-27:** `EMAIL_RESTRICT_TO` is set in Vercel
+  to `jkdtharindu@gmail.com`, narrowing admin alerts to that one deliverable address so the
+  owner at least learns a booking arrived. Guest mail is deliberately NOT redirected — sending
+  a guest's confirmation to the owner would deliver the wrong person's mail and make
+  `email_log` misreport who was contacted.
 
-  Two admins (`srivacation0@gmail.com`, `cs.jayasinghe1990@gmail.com`) are therefore **not**
-  being notified of new bookings. Every send logs a warning naming them.
+  **Accepted, understood consequences of running this way:**
+  - Real guests receive **nothing**. Staff must confirm by phone, which they already do — the
+    booking flow was manual-approval and manual-payment from the start, so this is a degraded
+    experience rather than a broken one.
+  - Two admins (`srivacation0@gmail.com`, `cs.jayasinghe1990@gmail.com`) are **not** notified
+    of new bookings and must check the admin panel. Every send logs a warning naming them.
+  - Failed guest sends accumulate as `failed` rows in `email_log` and will show on the
+    dashboard as "N emails failed today". That is truthful, not a fault — but it means the
+    failure banner will be a permanent fixture until this is fixed, and there is a real risk
+    of it becoming background noise that masks a *different* failure later.
 
-  **The fix, when affordable:** register a domain (~$12/yr), verify it at
-  resend.com/domains, point `EMAIL_FROM` at an address on it, and **unset `EMAIL_RESTRICT_TO`
-  in Vercel**. No code change — the restriction lifts itself when the variable goes.
+  **Planned fix — deferred on cost, not on judgement (owner decision, 2026-08-27).** The
+  business is pre-revenue and a domain is not affordable yet. Revisit when there is budget.
 
-  **Free alternative if a domain stays out of reach:** send through Gmail SMTP with an app
-  password (500/day, far above this property's needs). Deliverability is good because the mail
-  genuinely originates from Gmail. Costs a code change — swapping the Resend SDK inside
-  `lib/email.ts` — and guests would see a personal Gmail address as sender.
+  Route A (preferred, ~$12/yr): register a domain, verify it at resend.com/domains, point
+  `EMAIL_FROM` at an address on it, and **unset `EMAIL_RESTRICT_TO` in Vercel**. No code
+  change — the restriction lifts itself when the variable goes. Also replaces the
+  `*.vercel.app` address guests currently see.
 
-  **Revisit when:** there is budget for a domain, or a guest complains they never received a
-  confirmation. Do not consider email "done" until this is resolved.
+  Route B (free, if a domain stays out of reach): send via Gmail SMTP with an app password —
+  500/day, far above this property's needs, and deliverability is good because the mail
+  genuinely originates from Gmail. Costs a code change, contained to `lib/email.ts` since
+  everything else calls `sendEmail` rather than Resend directly. Guests would see a personal
+  Gmail address as sender.
+
+  **Revisit when:** there is budget for a domain, a guest reports never receiving a
+  confirmation, or the permanent failure banner starts hiding unrelated problems. Do not
+  consider email "done" until one of the two routes is taken.
 - **Template copy lives in code, not the admin panel.** Unlike DefaultNotes (Slice 11), the
   wording in `src/lib/email-templates.ts` can only be changed by editing the file and
   redeploying — there is no admin-editable equivalent yet, by design for now (see

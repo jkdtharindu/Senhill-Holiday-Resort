@@ -51,6 +51,8 @@ committed, rotate it — deleting it in a later commit does not remove it from g
 - `docs/HITL.md` — actions that require explicit human approval before proceeding
 - `docs/MAINTENANCE.md` — decisions carrying a known trade-off, each with the condition under
   which it should be revisited once the app is live. Read the "Revisit when" lines first
+- `docs/DEPLOYMENT_STATUS.md` — what's actually configured in production right now: env vars,
+  known gaps, migration status. A snapshot of current state, not a build log
 - `docs/tasks.md` — build checklist in vertical slices, plus the full decision log
 
 ## Quick summary of the core mechanic

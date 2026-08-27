@@ -539,11 +539,24 @@ longer act on it anyway. If that list is ever empty (mid-transition between admi
 own confirmation still sends; a missing admin alert is a visibility gap, not a reason to fail the
 booking.
 
-**Sending domain.** `EMAIL_FROM` (env var) controls the `From:` address. Until a custom domain is
-verified in Resend, it is set to Resend's own `onboarding@resend.dev` test sender — functional,
-but guests see a generic address rather than the property's own domain. Once a domain is verified
-in the Resend dashboard, update `EMAIL_FROM` in both `.env.local` and Vercel's project settings;
-no code change needed.
+**Sending domain — currently unverified, and this is a functional limitation, not cosmetic.**
+`EMAIL_FROM` controls the `From:` address and points at Resend's `onboarding@resend.dev` test
+sender. An unverified Resend account accepts sends **only to the account owner's own address**
+and rejects the **entire send** if any other recipient is present — so a real guest receives
+nothing, and a multi-admin alert reaches nobody rather than merely some people. Confirmed in
+production 2026-08-27.
+
+`EMAIL_RESTRICT_TO` (env var) is the interim workaround: while set, `getActiveAdminEmails()`
+narrows admin alerts to that one deliverable address, and names every suppressed admin in a
+warning on each send. Applied to admin alerts ONLY — guest confirmations are deliberately never
+redirected, because delivering a guest's mail to the owner would misreport who was contacted.
+A confirmation to a non-owner guest fails honestly and is recorded as `failed`.
+
+Unsetting `EMAIL_RESTRICT_TO` after verifying a domain restores normal multi-admin behaviour with
+no code change. There is deliberately no way to set it to more than one address — if more than
+one recipient is deliverable, the domain is verified and the variable should be gone entirely.
+
+See `docs/MAINTENANCE.md` §5 for the fix routes and their trade-offs.
 
 **Cost.** Resend's free tier (100 emails/day, 3,000/month) covers this property's expected volume
 by a wide margin — a booking generates at most 2 emails (guest + admin alert), and even 50

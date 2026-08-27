@@ -1,135 +1,95 @@
 # Vercel Deployment Status
 
-**Last Updated:** 2026-08-25  
-**Status:** 🔄 In Progress — First Build Attempt (Failed, Fixable)
+**Last Updated:** 2026-08-27
+**Status:** ✅ Live in production — with one known functional gap (see below)
+
+**Production URL:** https://senhill-holiday-resort.vercel.app
 
 ---
 
-## ✅ Completed Steps
+## Current state
 
-- [x] Gathered all 5 environment variables
-  - `DATABASE_URL` (Neon PostgreSQL connection string)
-  - `ADMIN_JWT_SECRET`
-  - `NEXTAUTH_SECRET`
-  - `GOOGLE_CLIENT_ID`
-  - `GOOGLE_CLIENT_SECRET`
-- [x] Created Vercel account
-- [x] Connected GitHub repository to Vercel
-- [x] Added 5 environment variables to Vercel (with incorrect key name)
-- [x] Triggered first build
+The app has been live on Vercel since 2026-08-25. This file went stale for two days after that —
+it still described the first failed build attempt until this update. See `docs/tasks.md` and
+`MEMORY.md` for the actual day-by-day history; this file is a **snapshot of what's configured**,
+not a build log.
 
----
+## ⚠️ Known gap: guest confirmation emails do not reach real guests
 
-## ❌ Current Issue (Build Failed)
+Discovered by a real production booking on 2026-08-27. The Resend account has no verified
+sending domain, and an unverified account only accepts mail addressed to the account owner
+(`jkdtharindu@gmail.com`) — it rejects the entire send if any other recipient is present.
 
-**Error:** `DATABASE_URL is not set`
+**Current effect:** a real guest's booking confirmation is rejected by the provider and logged
+as `failed`. `EMAIL_RESTRICT_TO` (below) narrows admin alerts to one working address so the owner
+still learns when a booking arrives; two of the three admins are not notified and must check the
+admin panel. Full account in `docs/MAINTENANCE.md` §5.
 
-**Root Cause:** Environment variable was named `NEON_DATABASE_URL` instead of `DATABASE_URL`
-
-**Location:** Build logs from 2026-08-25 01:36:44 UTC
-
-```
-Error: DATABASE_URL is not set. Copy .env.example to .env.local and paste your Neon connection string into it.
-at src/db/index.ts:24:11
-```
+**Fix (deferred on cost, owner decision 2026-08-27):** verify a domain in Resend (~$12/yr), point
+`EMAIL_FROM` at an address on it, then delete `EMAIL_RESTRICT_TO` from Vercel. No code change.
 
 ---
 
-## 🔧 Yet To Do (Next Steps)
+## Environment variables — as configured in Vercel today
 
-### **Step 1: Fix Environment Variable Name** (2 minutes)
-- [ ] Navigate to Vercel project → Settings → Environment Variables
-- [ ] Find the `NEON_DATABASE_URL` entry
-- [ ] Edit the key and change it to `DATABASE_URL`
-- [ ] Keep the value exactly the same (the PostgreSQL URL)
-- [ ] Save
-
-### **Step 2: Redeploy** (3-5 minutes)
-- [ ] Go to Deployments tab
-- [ ] Click on the failed deployment
-- [ ] Click Redeploy button
-- [ ] Wait for build to complete (should show ✅ green)
-
-### **Step 3: Update Google OAuth Redirect URI** (2 minutes)
-- [ ] Go to Google Cloud Console
-- [ ] Navigate to Credentials → OAuth 2.0 Client ID
-- [ ] Add to Authorized Redirect URIs:
-  ```
-  https://your-project-abc123.vercel.app/api/auth/callback/google
-  ```
-  (Replace `your-project-abc123` with actual Vercel URL)
-- [ ] Save
-
-### **Step 4: Verify Deployment** (5 minutes)
-- [ ] Visit your Vercel URL: `https://your-project-abc123.vercel.app`
-- [ ] Test guest home page loads
-- [ ] Test Google Sign-In redirects to Google
-- [ ] Test admin login page at `/admin/login`
-- [ ] Test API endpoint: `/api/calendar?from=2026-08-24&to=2026-08-31`
-
-### **Step 5: Run Database Migration (if needed)**
-- [ ] Check if tables exist in production Neon database
-- [ ] If not, run locally: `npm run db:migrate`
-
----
-
-## 📋 Environment Variables Summary
-
-| Variable | Value | Status |
+| Variable | Purpose | Status |
 |---|---|---|
-| `DATABASE_URL` | (Neon PostgreSQL connection string from `.env.local`) | ✅ Set in Vercel |
-| `ADMIN_JWT_SECRET` | (Random secret from `.env.local`) | ✅ Set in Vercel |
-| `NEXTAUTH_SECRET` | (Random secret from `.env.local`) | ✅ Set in Vercel |
-| `GOOGLE_CLIENT_ID` | (From Google OAuth Console) | ✅ Set in Vercel |
-| `GOOGLE_CLIENT_SECRET` | (From Google OAuth Console) | ✅ Set in Vercel |
+| `DATABASE_URL` | Neon PostgreSQL connection string | ✅ Set |
+| `ADMIN_JWT_SECRET` | Signs admin session tokens | ✅ Set |
+| `NEXTAUTH_SECRET` | Signs guest (Auth.js) session tokens | ✅ Set |
+| `GOOGLE_CLIENT_ID` | Google OAuth, guest sign-in | ✅ Set |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth, guest sign-in | ✅ Set |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob, room/villa photo uploads | ✅ Set |
+| `RESEND_API_KEY` | Outgoing email (Slice 15, 2026-08-27) | ✅ Set |
+| `EMAIL_FROM` | Sender address for outgoing email | ✅ Set — `onboarding@resend.dev` (Resend's shared test sender; not a verified domain) |
+| `EMAIL_RESTRICT_TO` | **Temporary workaround** — narrows admin alerts to one deliverable address until a domain is verified | ✅ Set — `jkdtharindu@gmail.com`. **Delete this once a domain is verified**, not just leave it; its continued presence is what keeps admin alerts narrowed to one person. |
 
-⚠️ **Never commit actual secrets to this file.** All real values are in `.env.local` (git-ignored) and Vercel environment settings.
+⚠️ **Never commit actual secrets to this file.** Real values live in `.env.local` (git-ignored)
+and Vercel's environment settings. This table records *what exists*, not the values themselves.
+
+## Database
+
+Schema is current as of migration `0003_email_log.sql` (2026-08-27), applied to the live Neon
+database with explicit owner approval per `HITL.md`. Migrations are NOT run automatically on
+deploy — after adding a migration, run `npm run db:migrate` locally against the production
+`DATABASE_URL` before the code that depends on it goes live. This has occasionally meant a brief
+window where deployed code expects a column/table that doesn't exist yet if the two are
+sequenced wrong; check `drizzle/` against what's actually applied if something 500s right after
+a deploy that included a schema change.
+
+## What's live
+
+All 14 original frontend screens, DayMode set/switch/clear, two-admin booking approval, booking
+cancellation (guest self-withdrawal + admin cancel), the approval-queue block, the admin
+color-coded availability calendar, the public `/contact` page, and email notifications for
+booking confirmation / admin alert / approved / declined / cancelled (subject to the domain gap
+above). See `docs/tasks.md` for the full slice-by-slice build order and verification log.
+
+## Google OAuth redirect URI
+
+The production URL's callback (`https://senhill-holiday-resort.vercel.app/api/auth/callback/google`)
+must be registered in Google Cloud Console → Credentials → OAuth 2.0 Client ID → Authorized
+Redirect URIs, alongside the `localhost:3000` one used for local dev. Confirmed working — guest
+Google sign-in succeeds in production (see `docs/tasks.md`, Slice 3, and the production booking
+test on 2026-08-27, which required a real sign-in to reach the booking form).
 
 ---
 
-## 🔗 Important Links
+## Troubleshooting reference
 
-- **Vercel Dashboard:** https://vercel.com/dashboard
-- **Neon Console:** https://console.neon.tech
-- **Google Cloud Console:** https://console.cloud.google.com
-- **Production URL:** (will be assigned after successful build)
+**If a deploy fails on a missing env var:** check the table above against Vercel's Settings →
+Environment Variables — the exact key name matters (`DATABASE_URL`, not a variant), and it must
+be enabled for the Production environment, not only Preview/Development.
 
----
+**If email silently doesn't send:** check `RESEND_API_KEY` is set for Production, then check the
+admin dashboard's "Recent email activity" panel or query `email_log` directly — every attempt is
+recorded there with its outcome, including `skipped_no_api_key` (key missing) and `failed`
+(provider rejected it, with the reason in `error_message`).
 
-## 📝 Notes
+**If a new migration's table/column seems missing in production:** migrations don't run on
+deploy automatically — confirm `npm run db:migrate` was actually run against the production
+`DATABASE_URL` after the migration file was generated.
 
-- Database schema already exists in Neon (created during local setup with `npm run db:migrate`)
-- No additional database setup needed on production, just connection string
-- All 14 frontend screens are built and ready
-- All API endpoints are implemented and tested
-
----
-
-## Timeline
-
-| Date | Time | Event |
-|---|---|---|
-| 2026-08-25 | 01:36:44 UTC | First Vercel build triggered |
-| 2026-08-25 | 01:37:07 UTC | Build failed due to missing `DATABASE_URL` |
-| 2026-08-25 | (pending) | Fix applied (rename env var) |
-| 2026-08-25 | (pending) | Redeploy and verify |
-
----
-
-## Troubleshooting Reference
-
-**If build still fails after renaming:**
-1. Check Vercel is using the updated environment variable (refresh dashboard)
-2. Check the exact spelling: `DATABASE_URL` (uppercase, no spaces)
-3. Check the connection string doesn't have quotes around it
-4. Check Neon database is still accessible (test locally first)
-
-**If sign-in doesn't work:**
-1. Update Google OAuth redirect URIs (see Step 3 above)
-2. Verify Google credentials are correct in Vercel
-3. Test Google Sign-In flow in browser DevTools
-
-**If pages 404:**
-1. Check Vercel build logs for TypeScript errors
-2. Verify all routes were compiled (check `npm run build` locally first)
-
+**If sign-in doesn't work:** check the Google OAuth redirect URI above is registered for the
+production domain, and that `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in Vercel match the same
+Google Cloud project.
